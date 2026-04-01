@@ -13,16 +13,28 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.8
         version: 1.19.12(hono@4.12.9)
+      bcryptjs:
+        specifier: ^2.4.3
+        version: 2.4.3
       db:
         specifier: workspace:*
         version: link:../../packages/db
+      drizzle-orm:
+        specifier: ^0.40.0
+        version: 0.40.1(gel@2.2.0)(postgres@3.4.8)
       hono:
         specifier: ^4.7.4
         version: 4.12.9
+      jose:
+        specifier: ^5.10.0
+        version: 5.10.0
       zod:
         specifier: ^3.24.2
         version: 3.25.76
     devDependencies:
+      '@types/bcryptjs':
+        specifier: ^2.4.6
+        version: 2.4.6
       '@types/node':
         specifier: ^22.13.10
         version: 22.19.15
@@ -925,6 +937,9 @@ packages:
     resolution: {integrity: sha512-6B3tLtFqtQS4ekarvLVMZ+X+VlvQekbe4taUkf/rhVO3d/h0M2rfARm/pXLcPEsjjMsFgrFgSrhQIxcSVrBz8w==}
     engines: {node: '>=18'}
 
+  jose@5.10.0:
+    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
+
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
     engines: {node: '>=10'}
@@ -1793,6 +1808,8 @@ snapshots:
   hono@4.12.9: {}
 
   isexe@3.1.5: {}
+
+  jose@5.10.0: {}
 
   joycon@3.1.1: {}
 

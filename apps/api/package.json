@@ -11,11 +11,15 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.8",
+    "bcryptjs": "^2.4.3",
     "db": "workspace:*",
+    "drizzle-orm": "^0.40.0",
     "hono": "^4.7.4",
+    "jose": "^5.10.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.13.10",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
