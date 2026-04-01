@@ -21,9 +21,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 COPY --from=build /app /app
-COPY apps/api/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
-# Use /bin/sh explicitly so CRLF in the script on Windows build hosts does not break the shebang.
-ENTRYPOINT ["/bin/sh", "/usr/local/bin/docker-entrypoint.sh"]
+# Inline shell: avoids CRLF in docker-entrypoint.sh on Windows build hosts breaking `set -e` (ash: illegal option -).
+ENTRYPOINT ["/bin/sh", "-c", "cd /app && pnpm --filter db migrate && pnpm --filter db seed && exec node apps/api/dist/index.js"]

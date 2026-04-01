@@ -94,6 +94,10 @@ Compose 环境下请确保 `DATABASE_URL` 使用主机名 **`db`**（见 `.env.e
 
 通过 **http://localhost:8080** 访问前端时，请将 `.env` 中 `CORS_ORIGIN` 设为该地址（与 `.env.example` 一致即可）。生产环境请改为真实站点域名。
 
+### 浏览器 `502 Bad Gateway` 且 `api` 日志含 `set: illegal option -`
+
+原因多为 **`docker-entrypoint.sh` 在 Windows 上使用 CRLF 行尾**，Alpine 内 `/bin/sh` 会把 `set -e` 解析坏。当前镜像已改为 **Dockerfile 内联 ENTRYPOINT**，不依赖该脚本。请拉取最新代码后执行 **`docker compose build api --no-cache`** 再 **`docker compose up -d`**。若仍见旧日志，可先 **`docker compose down`** 再重建。
+
 ---
 
 ## Project layout / 目录结构（摘要）
