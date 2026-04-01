@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { loadEnv } from "./env.js";
 import type { AuthVariables } from "./middleware/session.js";
+import { requireRoles } from "./middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "./middleware/session.js";
 import { authRouter, me } from "./routes/auth.js";
 
@@ -25,6 +26,10 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.route("/auth", authRouter);
 
 app.get("/me", sessionMiddleware, requireUser, me);
+
+app.get("/league/health", sessionMiddleware, requireRoles("league_admin"), (c) =>
+  c.json({ ok: true }),
+);
 
 serve(
   {

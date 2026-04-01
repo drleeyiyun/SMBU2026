@@ -6,6 +6,7 @@ import { loadEnv } from "../env.js";
 
 export type AuthVariables = {
   userId?: string;
+  roles?: import("./rbac.js").Role[];
 };
 
 export const sessionMiddleware: MiddlewareHandler<{ Variables: AuthVariables }> = async (
