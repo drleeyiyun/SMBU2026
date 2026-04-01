@@ -4,11 +4,13 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { loadEnv } from "./env.js";
 import type { AuthVariables } from "./middleware/session.js";
-import { requireRoles } from "./middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "./middleware/session.js";
 import { archiveRouter } from "./routes/archive.js";
 import { authRouter, me } from "./routes/auth.js";
+import { leagueRouter } from "./routes/league.js";
+import { orgsRouter } from "./routes/orgs.js";
 import { scheduleRouter } from "./routes/schedule.js";
+import { tasksRouter } from "./routes/tasks.js";
 
 const env = loadEnv();
 
@@ -33,9 +35,10 @@ app.route("/schedule", scheduleRouter);
 
 app.route("/archive", archiveRouter);
 
-app.get("/league/health", sessionMiddleware, requireRoles("league_admin"), (c) =>
-  c.json({ ok: true }),
-);
+app.route("/orgs", orgsRouter);
+app.route("/tasks", tasksRouter);
+
+app.route("/league", leagueRouter);
 
 serve(
   {
