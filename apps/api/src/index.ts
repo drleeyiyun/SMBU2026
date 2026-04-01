@@ -9,8 +9,10 @@ import { archiveRouter } from "./routes/archive.js";
 import { authRouter, me } from "./routes/auth.js";
 import { leagueRouter } from "./routes/league.js";
 import { orgsRouter } from "./routes/orgs.js";
+import { plansRouter } from "./routes/plans.js";
 import { scheduleRouter } from "./routes/schedule.js";
 import { tasksRouter } from "./routes/tasks.js";
+import { timelineRouter } from "./routes/timeline.js";
 
 const env = loadEnv();
 
@@ -32,6 +34,10 @@ app.route("/auth", authRouter);
 app.get("/me", sessionMiddleware, requireUser, me);
 
 app.route("/schedule", scheduleRouter);
+
+app.route("/timeline", timelineRouter);
+
+app.route("/plans", plansRouter);
 
 app.route("/archive", archiveRouter);
 
