@@ -6,6 +6,7 @@ import { loadEnv } from "./env.js";
 import type { AuthVariables } from "./middleware/session.js";
 import { requireRoles } from "./middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "./middleware/session.js";
+import { archiveRouter } from "./routes/archive.js";
 import { authRouter, me } from "./routes/auth.js";
 import { scheduleRouter } from "./routes/schedule.js";
 
@@ -29,6 +30,8 @@ app.route("/auth", authRouter);
 app.get("/me", sessionMiddleware, requireUser, me);
 
 app.route("/schedule", scheduleRouter);
+
+app.route("/archive", archiveRouter);
 
 app.get("/league/health", sessionMiddleware, requireRoles("league_admin"), (c) =>
   c.json({ ok: true }),
