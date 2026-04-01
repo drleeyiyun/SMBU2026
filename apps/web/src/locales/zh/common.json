@@ -1,0 +1,19 @@
+{
+  "nav": {
+    "archive": "档案",
+    "oa": "OA",
+    "timeline": "时间线",
+    "notifications": "通知"
+  },
+  "login": {
+    "title": "登录",
+    "email": "邮箱",
+    "password": "密码",
+    "submit": "登录"
+  },
+  "lang": {
+    "zh": "中文",
+    "en": "English",
+    "ru": "Русский"
+  }
+}

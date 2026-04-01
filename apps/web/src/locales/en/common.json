@@ -1,0 +1,19 @@
+{
+  "nav": {
+    "archive": "Archive",
+    "oa": "OA",
+    "timeline": "Timeline",
+    "notifications": "Notifications"
+  },
+  "login": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in"
+  },
+  "lang": {
+    "zh": "中文",
+    "en": "English",
+    "ru": "Русский"
+  }
+}

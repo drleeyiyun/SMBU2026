@@ -1,0 +1,19 @@
+{
+  "nav": {
+    "archive": "Архив",
+    "oa": "OA",
+    "timeline": "Расписание",
+    "notifications": "Уведомления"
+  },
+  "login": {
+    "title": "Вход",
+    "email": "Эл. почта",
+    "password": "Пароль",
+    "submit": "Войти"
+  },
+  "lang": {
+    "zh": "中文",
+    "en": "English",
+    "ru": "Русский"
+  }
+}
