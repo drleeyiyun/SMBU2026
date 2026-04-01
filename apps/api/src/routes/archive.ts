@@ -9,6 +9,7 @@ import {
   studentProfiles,
   volunteerRecords,
 } from "db/schema";
+import { broadcastNotification } from "../lib/notification-broadcast.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
@@ -315,6 +316,8 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
 
     const decidedAt = new Date();
 
+    let insertedNotification: (typeof notifications.$inferSelect) | undefined;
+
     await db.transaction(async (tx) => {
       if (action === "approve") {
         const nextPhone =
@@ -343,18 +346,26 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
           .where(eq(studentProfiles.userId, targetUserId));
       }
 
-      await tx.insert(notifications).values({
-        userId: targetUserId,
-        type: "archive_audit",
-        payloadJson: JSON.stringify({
-          scope: "profile",
-          action,
-          reason: action === "reject" ? reason!.trim() : null,
-          reviewerUserId: reviewerId,
-          decidedAt: decidedAt.toISOString(),
-        }),
-      });
+      const [row] = await tx
+        .insert(notifications)
+        .values({
+          userId: targetUserId,
+          type: "archive_audit",
+          payloadJson: JSON.stringify({
+            scope: "profile",
+            action,
+            reason: action === "reject" ? reason!.trim() : null,
+            reviewerUserId: reviewerId,
+            decidedAt: decidedAt.toISOString(),
+          }),
+        })
+        .returning();
+      insertedNotification = row;
     });
+
+    if (insertedNotification) {
+      broadcastNotification(insertedNotification);
+    }
 
     const [updated] = await db
       .select()
@@ -497,6 +508,8 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     const decidedAt = new Date();
     const nextStatus = action === "approve" ? "approved" : "rejected";
 
+    let insertedAwardNotification: (typeof notifications.$inferSelect) | undefined;
+
     await db.transaction(async (tx) => {
       await tx
         .update(awards)
@@ -508,19 +521,27 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
         })
         .where(eq(awards.id, awardId));
 
-      await tx.insert(notifications).values({
-        userId: award.userId,
-        type: "archive_audit",
-        payloadJson: JSON.stringify({
-          scope: "award",
-          awardId,
-          action,
-          reason: action === "reject" ? reason!.trim() : null,
-          reviewerUserId: reviewerId,
-          decidedAt: decidedAt.toISOString(),
-        }),
-      });
+      const [row] = await tx
+        .insert(notifications)
+        .values({
+          userId: award.userId,
+          type: "archive_audit",
+          payloadJson: JSON.stringify({
+            scope: "award",
+            awardId,
+            action,
+            reason: action === "reject" ? reason!.trim() : null,
+            reviewerUserId: reviewerId,
+            decidedAt: decidedAt.toISOString(),
+          }),
+        })
+        .returning();
+      insertedAwardNotification = row;
     });
+
+    if (insertedAwardNotification) {
+      broadcastNotification(insertedAwardNotification);
+    }
 
     const [updated] = await db.select().from(awards).where(eq(awards.id, awardId)).limit(1);
 

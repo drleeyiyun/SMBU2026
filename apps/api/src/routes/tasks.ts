@@ -11,6 +11,7 @@ import {
   orgTasks,
   userRoles,
 } from "db/schema";
+import { broadcastNotification } from "../lib/notification-broadcast.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
@@ -186,6 +187,8 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables }>()
     if (creatorId && creatorId !== actorId) notifyUserIds.add(creatorId);
     if (assigneeId && assigneeId !== actorId) notifyUserIds.add(assigneeId);
 
+    const insertedNotifications: (typeof notifications.$inferSelect)[] = [];
+
     await db.transaction(async (tx) => {
       await tx
         .update(orgTaskAssignments)
@@ -211,13 +214,21 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables }>()
       const payloadJson = JSON.stringify(payload);
 
       for (const uid of notifyUserIds) {
-        await tx.insert(notifications).values({
-          userId: uid,
-          type: "task_status",
-          payloadJson,
-        });
+        const [n] = await tx
+          .insert(notifications)
+          .values({
+            userId: uid,
+            type: "task_status",
+            payloadJson,
+          })
+          .returning();
+        if (n) insertedNotifications.push(n);
       }
     });
+
+    for (const n of insertedNotifications) {
+      broadcastNotification(n);
+    }
 
     const [updated] = await db
       .select()
