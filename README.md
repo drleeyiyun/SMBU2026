@@ -94,6 +94,10 @@ Compose 环境下请确保 `DATABASE_URL` 使用主机名 **`db`**（见 `.env.e
 
 通过 **http://localhost:8080** 访问前端时，请将 `.env` 中 `CORS_ORIGIN` 设为该地址（与 `.env.example` 一致即可）。生产环境请改为真实站点域名。
 
+### 浏览器对 `/me`、`/auth/login` 返回 `502`（API 日志正常）
+
+Nginx 配置里若使用 **`proxy_pass $变量`**，通常需要配置 **`resolver`**（例如 Docker 内置 DNS `127.0.0.11`），否则可能无法解析 `api` 主机名并统一返回 **502**。当前仓库已改为 **`proxy_pass http://api:3000`** 字面量；请 **`docker compose build web`** 后 **`docker compose up -d`**。同时 API 在容器内需监听 **`0.0.0.0`**（代码中已对 `@hono/node-server` 设置）。
+
 ### 浏览器 `502 Bad Gateway` 且 `api` 日志含 `set: illegal option -`
 
 原因多为 **`docker-entrypoint.sh` 在 Windows 上使用 CRLF 行尾**，Alpine 内 `/bin/sh` 会把 `set -e` 解析坏。当前镜像已改为 **Dockerfile 内联 ENTRYPOINT**，不依赖该脚本。请拉取最新代码后执行 **`docker compose build api --no-cache`** 再 **`docker compose up -d`**。若仍见旧日志，可先 **`docker compose down`** 再重建。
