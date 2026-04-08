@@ -44,6 +44,7 @@ async function main(): Promise<void> {
     await tx.delete(schema.studentProfiles);
     await tx.delete(schema.personalPlans);
     await tx.delete(schema.notifications);
+    await tx.delete(schema.leagueCoordinationEvents);
     await tx.delete(schema.organizations);
     await tx.delete(schema.userRoles);
     await tx.delete(schema.users);
@@ -227,6 +228,43 @@ async function main(): Promise<void> {
       { userId: student.id, category: "planning", label: "活动策划" },
       { userId: student.id, category: "management", label: "团队协作" },
       { userId: student.id, category: "sports", label: "羽毛球" },
+    ]);
+
+    const weekStart = new Date(now);
+    const dow = weekStart.getUTCDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    weekStart.setUTCDate(weekStart.getUTCDate() + mondayOffset);
+    weekStart.setUTCHours(0, 0, 0, 0);
+
+    const practiceStart = new Date(weekStart);
+    practiceStart.setUTCDate(practiceStart.getUTCDate() + 2);
+    practiceStart.setUTCHours(16, 0, 0, 0);
+    const practiceEnd = new Date(practiceStart);
+    practiceEnd.setUTCHours(18, 0, 0, 0);
+
+    const volunteerStart = new Date(weekStart);
+    volunteerStart.setUTCDate(volunteerStart.getUTCDate() + 4);
+    volunteerStart.setUTCHours(9, 30, 0, 0);
+    const volunteerEnd = new Date(volunteerStart);
+    volunteerEnd.setUTCHours(12, 0, 0, 0);
+
+    await tx.insert(schema.leagueCoordinationEvents).values([
+      {
+        title: "各社团代表队联合训练",
+        description: "体育馆羽毛球场，请提前十分钟到场签到。",
+        category: "practice",
+        startsAt: practiceStart,
+        endsAt: practiceEnd,
+        createdByUserId: league.id,
+      },
+      {
+        title: "校园志愿服务协调会",
+        description: "汇总本周各组织志愿活动安排，避免时间冲突。",
+        category: "volunteer",
+        startsAt: volunteerStart,
+        endsAt: volunteerEnd,
+        createdByUserId: league.id,
+      },
     ]);
   });
 

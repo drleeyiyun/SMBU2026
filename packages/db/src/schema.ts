@@ -272,3 +272,30 @@ export const notifications = pgTable("notifications", {
   readAt: timestamp("read_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const coordinationCategoryEnum = pgEnum("coordination_category", [
+  "practice",
+  "volunteer",
+  "work_study",
+  "general",
+]);
+
+export const leagueCoordinationEvents = pgTable(
+  "league_coordination_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    title: text("title").notNull(),
+    description: text("description"),
+    category: coordinationCategoryEnum("category").notNull().default("general"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("league_coordination_range_idx").on(t.startsAt, t.endsAt),
+  ],
+);
