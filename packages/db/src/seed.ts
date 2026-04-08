@@ -6,6 +6,7 @@
  * metadata), then inserts demo rows in one transaction. Safe to re-run on a dev DB.
  */
 
+import "./load-root-env.js";
 import bcrypt from "bcryptjs";
 import { db } from "./client.js";
 import * as schema from "./schema.js";
