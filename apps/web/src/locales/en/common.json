@@ -3,7 +3,9 @@
     "archive": "Archive",
     "oa": "OA",
     "timeline": "Timeline",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "plans": "Plans",
+    "leagueCoordination": "League coordination"
   },
   "login": {
     "title": "Sign in",
@@ -15,5 +17,59 @@
     "zh": "中文",
     "en": "English",
     "ru": "Русский"
+  },
+  "timeline": {
+    "title": "Timeline",
+    "day": "Day",
+    "week": "Week",
+    "month": "Month",
+    "sourceSchedule": "Class schedule",
+    "sourcePlan": "Personal plan",
+    "sourceOrgTask": "Organization task",
+    "sourceLeague": "League coordination",
+    "filterPlaceholder": "Filter by title or location…",
+    "syncSchedule": "Sync schedule",
+    "staleWarning": "Your schedule data may be out of date (not refreshed for over 48 hours). Consider syncing again.",
+    "quickAddPlan": "Quick add plan",
+    "range": "Date range",
+    "apply": "Apply",
+    "loading": "Loading…",
+    "empty": "Nothing scheduled in this range",
+    "errorInvalidRange": "Invalid date range",
+    "legend": "Legend",
+    "categoryPractice": "Social practice",
+    "categoryVolunteer": "Volunteering",
+    "categoryWorkStudy": "Work-study",
+    "categoryGeneral": "General"
+  },
+  "plans": {
+    "title": "Personal plans",
+    "create": "New plan",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "status": "Status",
+    "priority": "Priority",
+    "onTimeline": "Show on timeline",
+    "startsAt": "Starts at",
+    "endsAt": "Ends at",
+    "titleLabel": "Title",
+    "empty": "No plans yet",
+    "loadError": "Could not load plans"
+  },
+  "leagueCoordination": {
+    "title": "League coordination",
+    "category": "Category",
+    "save": "Save",
+    "create": "New event",
+    "delete": "Delete",
+    "edit": "Edit",
+    "listEmpty": "No coordination events yet",
+    "loadError": "Could not load coordination events",
+    "forbidden": "You do not have access to this page",
+    "titleLabel": "Title",
+    "descriptionLabel": "Description",
+    "startsAt": "Starts at",
+    "endsAt": "Ends at"
   }
 }

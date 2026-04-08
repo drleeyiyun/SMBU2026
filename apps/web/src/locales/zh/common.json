@@ -3,7 +3,9 @@
     "archive": "档案",
     "oa": "OA",
     "timeline": "时间线",
-    "notifications": "通知"
+    "notifications": "通知",
+    "plans": "个人计划",
+    "leagueCoordination": "团委统筹"
   },
   "login": {
     "title": "登录",
@@ -15,5 +17,59 @@
     "zh": "中文",
     "en": "English",
     "ru": "Русский"
+  },
+  "timeline": {
+    "title": "时间轴",
+    "day": "日",
+    "week": "周",
+    "month": "月",
+    "sourceSchedule": "课表",
+    "sourcePlan": "个人计划",
+    "sourceOrgTask": "组织任务",
+    "sourceLeague": "团委统筹",
+    "filterPlaceholder": "按标题或地点筛选…",
+    "syncSchedule": "同步课表",
+    "staleWarning": "课表数据可能已过时（超过 48 小时未刷新），建议重新同步。",
+    "quickAddPlan": "快速添加计划",
+    "range": "时间范围",
+    "apply": "应用",
+    "loading": "加载中…",
+    "empty": "该时段暂无安排",
+    "errorInvalidRange": "时间范围无效",
+    "legend": "图例",
+    "categoryPractice": "社会实践",
+    "categoryVolunteer": "志愿服务",
+    "categoryWorkStudy": "勤工助学",
+    "categoryGeneral": "其他"
+  },
+  "plans": {
+    "title": "个人计划",
+    "create": "新建计划",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "status": "状态",
+    "priority": "优先级",
+    "onTimeline": "在时间轴中显示",
+    "startsAt": "开始时间",
+    "endsAt": "结束时间",
+    "titleLabel": "标题",
+    "empty": "暂无计划",
+    "loadError": "无法加载计划列表"
+  },
+  "leagueCoordination": {
+    "title": "团委统筹",
+    "category": "类别",
+    "save": "保存",
+    "create": "新建事件",
+    "delete": "删除",
+    "edit": "编辑",
+    "listEmpty": "暂无统筹事件",
+    "loadError": "无法加载统筹事件",
+    "forbidden": "您没有权限访问此页面",
+    "titleLabel": "标题",
+    "descriptionLabel": "说明",
+    "startsAt": "开始时间",
+    "endsAt": "结束时间"
   }
 }
