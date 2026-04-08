@@ -9,6 +9,7 @@ import {
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
+import { coordinationRouter } from "./league-coordination.js";
 
 const STATUS_VALUES = ["unread", "read", "in_progress", "done"] as const;
 
@@ -35,6 +36,7 @@ function taskToJson(t: typeof orgTasks.$inferSelect) {
 
 export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
   .use("*", sessionMiddleware)
+  .route("/coordination-events", coordinationRouter)
   .get("/health", requireUser, requireRoles("league_admin"), (c) => c.json({ ok: true }))
   .get("/tasks-overview", requireUser, requireRoles("league_admin"), async (c) => {
     const orgIdRaw = c.req.query("orgId");
