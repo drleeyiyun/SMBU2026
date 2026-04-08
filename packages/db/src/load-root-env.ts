@@ -2,6 +2,6 @@ import { config } from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Load repo-root `.env` so CLI tools and `db` client see `DATABASE_URL` when run from `packages/db`. */
+/** Load repo-root `.env` (this file lives in `packages/db/src/`, so three levels up). */
 const here = path.dirname(fileURLToPath(import.meta.url));
-config({ path: path.resolve(here, "../../.env") });
+config({ path: path.resolve(here, "../../../.env") });
