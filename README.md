@@ -47,7 +47,9 @@ Compose 服务说明：
 
 ## Optional: local dev with Postgres / 可选：本地 Postgres + pnpm 开发
 
-1. 启动本机 PostgreSQL，并创建库（例如 `campus`），`DATABASE_URL` 指向 `localhost`。
+1. 启动本机 PostgreSQL，并创建库（例如 `campus`）。将 **仓库根目录** `.env` 中的 `DATABASE_URL` 配成本机（**不要**使用仅适用于 Docker 的主机名 `db`），例如：  
+   `postgresql://postgres:postgres@localhost:5432/campus`  
+   迁移与种子会从该文件读取连接串（`packages/db` 内命令无需再单独导出环境变量）。
 2. 安装依赖并执行迁移、种子：
 
 ```bash
@@ -56,6 +58,8 @@ pnpm db:migrate
 pnpm db:seed
 pnpm dev
 ```
+
+在 **Windows** 上若提示 **`pnpm` 不是内部或外部命令**：根脚本已改为通过 `npx pnpm@9.15.0` 调用子包，可直接再试 `pnpm db:migrate`；或全程使用 `corepack pnpm db:migrate` / `corepack pnpm --filter db migrate`。
 
 前端开发服务器会使用 `vite.config.ts` 中的代理将 `/auth`、`/me`、`/timeline` 等路径转发到 API（默认 `http://localhost:3000`）。
 

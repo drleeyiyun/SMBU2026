@@ -6,9 +6,9 @@
     "dev": "pnpm run --parallel dev",
     "build": "pnpm -r build",
     "test": "pnpm --filter api test",
-    "db:generate": "pnpm --filter db generate",
-    "db:migrate": "pnpm --filter db migrate",
-    "db:seed": "pnpm --filter db seed",
+    "db:generate": "npx --yes pnpm@9.15.0 --filter db generate",
+    "db:migrate": "npx --yes pnpm@9.15.0 --filter db migrate",
+    "db:seed": "npx --yes pnpm@9.15.0 --filter db seed",
     "lint": "pnpm -r lint"
   }
 }
