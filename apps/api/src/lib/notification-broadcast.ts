@@ -15,5 +15,5 @@ export function notificationRowToEvent(row: NotificationRow): Record<string, unk
 
 /** Call after a notification row is committed; fans out to SSE subscribers for that user. */
 export function broadcastNotification(row: NotificationRow): void {
-  sseHub.broadcast(row.userId, notificationRowToEvent(row));
+  sseHub.broadcast(row.userId, "notification", notificationRowToEvent(row));
 }

@@ -4,7 +4,7 @@ import { streamSSE } from "hono/streaming";
 import { db } from "db";
 import { notifications } from "db/schema";
 import { notificationRowToEvent } from "../lib/notification-broadcast.js";
-import { sseHub } from "../lib/sse-hub.js";
+import { sseHub, type SseStreamWriter } from "../lib/sse-hub.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
 
@@ -57,10 +57,10 @@ export const notificationsRouter = new Hono<{ Variables: AuthVariables }>()
     }
 
     return streamSSE(c, async (stream) => {
-      const writer: (event: object) => Promise<void> = async (event) => {
+      const writer: SseStreamWriter = async (eventName, data) => {
         await stream.writeSSE({
-          event: "notification",
-          data: JSON.stringify(event),
+          event: eventName,
+          data: JSON.stringify(data),
         });
       };
 

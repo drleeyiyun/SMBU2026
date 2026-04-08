@@ -1,7 +1,10 @@
 /**
  * In-memory fan-out: each user id maps to active SSE writers (Hono stream callbacks).
  */
-export type SseStreamWriter = (event: object) => void | Promise<void>;
+export type SseStreamWriter = (
+  eventName: string,
+  data: Record<string, unknown>,
+) => void | Promise<void>;
 
 export class SseHub {
   private readonly subscribers = new Map<string, Set<SseStreamWriter>>();
@@ -25,12 +28,16 @@ export class SseHub {
     }
   }
 
-  broadcast(userId: string, event: object): void {
+  broadcast(
+    userId: string,
+    eventName: string,
+    data: Record<string, unknown>,
+  ): void {
     const set = this.subscribers.get(userId);
     if (!set?.size) return;
     for (const writer of [...set]) {
       try {
-        const out = writer(event);
+        const out = writer(eventName, data);
         if (out !== undefined && typeof (out as Promise<void>).then === "function") {
           (out as Promise<void>).catch(() => this.unsubscribe(userId, writer));
         }
