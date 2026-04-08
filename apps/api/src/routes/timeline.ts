@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "db";
 import {
+  leagueCoordinationEvents,
   orgTaskAssignments,
   orgTasks,
   personalPlans,
@@ -51,7 +52,12 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
       gte(scheduleItemsCache.endsAt, from),
     );
 
-    const [scheduleRows, planRows, assignmentRows] = await Promise.all([
+    const coordinationRangeOverlap = and(
+      lte(leagueCoordinationEvents.startsAt, to),
+      gte(leagueCoordinationEvents.endsAt, from),
+    );
+
+    const [scheduleRows, planRows, assignmentRows, coordinationRows] = await Promise.all([
       db
         .select({
           id: scheduleItemsCache.id,
@@ -88,6 +94,18 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
         .from(orgTaskAssignments)
         .innerJoin(orgTasks, eq(orgTaskAssignments.taskId, orgTasks.id))
         .where(eq(orgTaskAssignments.assigneeUserId, userId)),
+      db
+        .select({
+          id: leagueCoordinationEvents.id,
+          title: leagueCoordinationEvents.title,
+          startsAt: leagueCoordinationEvents.startsAt,
+          endsAt: leagueCoordinationEvents.endsAt,
+          category: leagueCoordinationEvents.category,
+          description: leagueCoordinationEvents.description,
+        })
+        .from(leagueCoordinationEvents)
+        .where(coordinationRangeOverlap)
+        .orderBy(asc(leagueCoordinationEvents.startsAt)),
     ]);
 
     const now = new Date();
@@ -127,7 +145,14 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
         endsAt: r.endsAt,
       })),
       orgTasks: orgTasksForMerge,
-      leagueCoordination: [],
+      leagueCoordination: coordinationRows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        startsAt: r.startsAt,
+        endsAt: r.endsAt,
+        category: r.category,
+        description: r.description,
+      })),
     });
 
     return c.json({
