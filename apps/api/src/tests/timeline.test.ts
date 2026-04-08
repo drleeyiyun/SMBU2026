@@ -20,6 +20,7 @@ describe("mergeTimelineSources", () => {
       ],
       plans: [],
       orgTasks: [],
+      leagueCoordination: [],
     });
 
     expect(merged).toHaveLength(1);
@@ -57,9 +58,41 @@ describe("mergeTimelineSources", () => {
           sourceMeta: { assignmentId: "a1" },
         },
       ],
+      leagueCoordination: [],
     });
 
     expect(merged.map((m) => m.title)).toEqual(["Early", "Mid", "Late"]);
+  });
+
+  it("includes league_coordination with meta.category and sorts with other sources", () => {
+    const merged = mergeTimelineSources({
+      schedule: [],
+      plans: [
+        {
+          id: "p1",
+          title: "Plan",
+          startsAt: new Date("2026-04-02T15:00:00.000Z"),
+          endsAt: new Date("2026-04-02T16:00:00.000Z"),
+        },
+      ],
+      orgTasks: [],
+      leagueCoordination: [
+        {
+          id: "c1",
+          title: "Volunteer drive",
+          startsAt: new Date("2026-04-02T09:00:00.000Z"),
+          endsAt: new Date("2026-04-02T10:00:00.000Z"),
+          category: "volunteer",
+          description: "Hall",
+        },
+      ],
+    });
+    expect(merged.map((m) => m.sourceType)).toEqual([
+      "league_coordination",
+      "plan",
+    ]);
+    const row = merged.find((m) => m.sourceType === "league_coordination")!;
+    expect(row.meta).toMatchObject({ category: "volunteer" });
   });
 });
 

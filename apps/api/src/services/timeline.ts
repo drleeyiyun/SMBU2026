@@ -22,14 +22,24 @@ export type TimelineOrgTaskInput = {
   sourceMeta: unknown;
 };
 
+export type TimelineCoordinationInput = {
+  id: string;
+  title: string;
+  startsAt: Date;
+  endsAt: Date;
+  category: string;
+  description?: string | null;
+};
+
 export type MergeTimelineSourcesInput = {
   schedule: TimelineScheduleInput[];
   plans: TimelinePlanInput[];
   orgTasks: TimelineOrgTaskInput[];
+  leagueCoordination: TimelineCoordinationInput[];
 };
 
 export type MergedTimelineItem = {
-  sourceType: "schedule" | "plan" | "org_task";
+  sourceType: "schedule" | "plan" | "org_task" | "league_coordination";
   sourceId: string;
   title: string;
   startsAt: Date;
@@ -72,6 +82,21 @@ export function mergeTimelineSources(input: MergeTimelineSourcesInput): MergedTi
       startsAt: t.startsAt,
       endsAt: t.endsAt,
       meta: t.sourceMeta,
+    });
+  }
+
+  for (const c of input.leagueCoordination) {
+    const meta: { category: string; description?: string } = { category: c.category };
+    if (c.description != null && String(c.description).length > 0) {
+      meta.description = c.description;
+    }
+    items.push({
+      sourceType: "league_coordination",
+      sourceId: c.id,
+      title: c.title,
+      startsAt: c.startsAt,
+      endsAt: c.endsAt,
+      meta,
     });
   }
 

@@ -127,6 +127,7 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
         endsAt: r.endsAt,
       })),
       orgTasks: orgTasksForMerge,
+      leagueCoordination: [],
     });
 
     return c.json({
