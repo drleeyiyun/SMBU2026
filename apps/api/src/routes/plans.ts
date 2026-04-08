@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "db";
@@ -56,6 +56,15 @@ async function parseJsonBody(c: { req: { json: () => Promise<unknown> } }): Prom
 
 export const plansRouter = new Hono<{ Variables: AuthVariables }>()
   .use("*", sessionMiddleware, requireUser)
+  .get("/", async (c) => {
+    const userId = c.get("userId")!;
+    const rows = await db
+      .select()
+      .from(personalPlans)
+      .where(eq(personalPlans.userId, userId))
+      .orderBy(asc(personalPlans.startsAt));
+    return c.json({ plans: rows.map(planToJson) });
+  })
   .post("/", async (c) => {
     const userId = c.get("userId")!;
     const raw = await parseJsonBody(c);
