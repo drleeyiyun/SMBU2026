@@ -33,15 +33,46 @@ function mondayOfWeek(d: Date): Date {
   return new Date(s.getFullYear(), s.getMonth(), s.getDate() - diffFromMon);
 }
 
-function deriveRange(viewMode: "day" | "week", anchorDate: Date): { from: Date; to: Date } {
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function startOfNextMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 1);
+}
+
+function deriveRange(viewMode: "day" | "week" | "month", anchorDate: Date): { from: Date; to: Date } {
   if (viewMode === "day") {
     const from = startOfLocalDay(anchorDate);
     const to = endOfLocalDayExclusive(anchorDate);
     return { from, to };
   }
+  if (viewMode === "month") {
+    const from = startOfMonth(anchorDate);
+    const to = startOfNextMonth(anchorDate);
+    return { from, to };
+  }
   const from = mondayOfWeek(anchorDate);
   const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 7);
   return { from, to };
+}
+
+function localDateKeyFromYmd(y: number, monthIndex: number, day: number): string {
+  return `${y}-${pad(monthIndex + 1)}-${pad(day)}`;
+}
+
+function daysInMonth(y: number, monthIndex: number): number {
+  return new Date(y, monthIndex + 1, 0).getDate();
+}
+
+/** Monday = 0 … Sunday = 6 */
+function mondayFirstOffsetFromMonthStart(firstOfMonth: Date): number {
+  return (firstOfMonth.getDay() + 6) % 7;
+}
+
+function isTodayLocalYmd(y: number, monthIndex: number, day: number): boolean {
+  const now = new Date();
+  return now.getFullYear() === y && now.getMonth() === monthIndex && now.getDate() === day;
 }
 
 function defaultQuickAddRange(anchorDate: Date): { start: Date; end: Date } {
@@ -160,7 +191,7 @@ const btnToggleOff = "rounded-md border border-border bg-background px-3 py-2 te
 
 export default function TimelinePage() {
   const { t, i18n } = useTranslation("common");
-  const [viewMode, setViewMode] = useState<"day" | "week">("week");
+  const [viewMode, setViewMode] = useState<"day" | "week" | "month">("week");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [filterText, setFilterText] = useState("");
   const [items, setItems] = useState<TimelineItem[]>([]);
@@ -307,11 +338,83 @@ export default function TimelinePage() {
     return keys.map((k) => ({ dayKey: k, items: map.get(k)! }));
   }, [filteredItems]);
 
+  const monthDayDensity = useMemo(() => {
+    const map = new Map<string, number>();
+    if (viewMode !== "month") return map;
+    const y = anchorDate.getFullYear();
+    const m = anchorDate.getMonth();
+    const dim = daysInMonth(y, m);
+    for (let day = 1; day <= dim; day++) {
+      const dayStart = new Date(y, m, day);
+      const dayEnd = endOfLocalDayExclusive(dayStart);
+      let c = 0;
+      for (const it of filteredItems) {
+        const itemStart = new Date(it.startsAt);
+        const itemEnd = new Date(it.endsAt);
+        if (itemStart < dayEnd && itemEnd > dayStart) {
+          c++;
+        }
+      }
+      map.set(localDateKeyFromYmd(y, m, day), c);
+    }
+    return map;
+  }, [filteredItems, viewMode, anchorDate]);
+
+  const monthGridCells = useMemo((): ({ kind: "blank" } | { kind: "day"; day: number })[] => {
+    if (viewMode !== "month") return [];
+    const y = anchorDate.getFullYear();
+    const m = anchorDate.getMonth();
+    const first = new Date(y, m, 1);
+    const dim = daysInMonth(y, m);
+    const lead = mondayFirstOffsetFromMonthStart(first);
+    const cells: ({ kind: "blank" } | { kind: "day"; day: number })[] = [];
+    for (let i = 0; i < lead; i++) {
+      cells.push({ kind: "blank" });
+    }
+    for (let day = 1; day <= dim; day++) {
+      cells.push({ kind: "day", day });
+    }
+    while (cells.length % 7 !== 0) {
+      cells.push({ kind: "blank" });
+    }
+    return cells;
+  }, [viewMode, anchorDate]);
+
+  const weekdayLabelsMonFirst = useMemo(() => {
+    // 2024-01-01 is Monday (local)
+    return Array.from({ length: 7 }, (_, i) =>
+      new Date(2024, 0, 1 + i).toLocaleDateString(i18n.language, { weekday: "short" }),
+    );
+  }, [i18n.language]);
+
   function shiftAnchor(deltaDays: number) {
     setAnchorDate((prev) => {
       const s = startOfLocalDay(prev);
       return new Date(s.getFullYear(), s.getMonth(), s.getDate() + deltaDays);
     });
+  }
+
+  function shiftAnchorMonth(deltaMonths: number) {
+    setAnchorDate((prev) => {
+      const s = startOfLocalDay(prev);
+      return new Date(s.getFullYear(), s.getMonth() + deltaMonths, s.getDate());
+    });
+  }
+
+  function shiftPreviousPeriod() {
+    if (viewMode === "month") {
+      shiftAnchorMonth(-1);
+      return;
+    }
+    shiftAnchor(viewMode === "day" ? -1 : -7);
+  }
+
+  function shiftNextPeriod() {
+    if (viewMode === "month") {
+      shiftAnchorMonth(1);
+      return;
+    }
+    shiftAnchor(viewMode === "day" ? 1 : 7);
   }
 
   function goToday() {
@@ -391,8 +494,6 @@ export default function TimelinePage() {
     { type: "league_coordination", labelKey: "timeline.sourceLeague" },
   ];
 
-  const stepDays = viewMode === "day" ? 1 : 7;
-
   function renderItemRow(item: TimelineItem) {
     const style = sourceTypeStyles[item.sourceType] ?? "border-l-4 border-l-muted bg-muted/20";
     const cat = item.sourceType === "league_coordination" ? getMetaCategory(item.meta) : null;
@@ -434,6 +535,9 @@ export default function TimelinePage() {
           <button type="button" className={viewMode === "week" ? btnToggleOn : btnToggleOff} onClick={() => setViewMode("week")}>
             {t("timeline.week")}
           </button>
+          <button type="button" className={viewMode === "month" ? btnToggleOn : btnToggleOff} onClick={() => setViewMode("month")}>
+            {t("timeline.month")}
+          </button>
         </div>
       </div>
 
@@ -461,13 +565,13 @@ export default function TimelinePage() {
             />
           </label>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={btnGhost} onClick={() => shiftAnchor(-stepDays)} aria-label={t("timeline.previousPeriod")}>
+            <button type="button" className={btnGhost} onClick={shiftPreviousPeriod} aria-label={t("timeline.previousPeriod")}>
               {t("timeline.previousPeriod")}
             </button>
             <button type="button" className={btnGhost} onClick={goToday}>
               {t("timeline.today")}
             </button>
-            <button type="button" className={btnGhost} onClick={() => shiftAnchor(stepDays)} aria-label={t("timeline.nextPeriod")}>
+            <button type="button" className={btnGhost} onClick={shiftNextPeriod} aria-label={t("timeline.nextPeriod")}>
               {t("timeline.nextPeriod")}
             </button>
           </div>
@@ -555,6 +659,57 @@ export default function TimelinePage() {
         <h2 className="mb-3 text-lg font-semibold">{t("timeline.mergedEvents")}</h2>
         {loading ? (
           <p className="text-muted-foreground">{t("timeline.loading")}</p>
+        ) : viewMode === "month" ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-center text-sm font-semibold text-foreground">
+              {anchorDate.toLocaleDateString(i18n.language, { month: "long", year: "numeric" })}
+            </p>
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
+              {weekdayLabelsMonFirst.map((label, wi) => (
+                <div key={wi} className="py-1">
+                  {label}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {monthGridCells.map((cell, idx) => {
+                if (cell.kind === "blank") {
+                  return <div key={`b-${idx}`} className="min-h-[3.5rem]" />;
+                }
+                const y = anchorDate.getFullYear();
+                const m = anchorDate.getMonth();
+                const dayKey = localDateKeyFromYmd(y, m, cell.day);
+                const density = monthDayDensity.get(dayKey) ?? 0;
+                const today = isTodayLocalYmd(y, m, cell.day);
+                return (
+                  <button
+                    key={dayKey}
+                    type="button"
+                    onClick={() => {
+                      setAnchorDate(new Date(y, m, cell.day));
+                      setViewMode("day");
+                    }}
+                    className={`flex min-h-[3.5rem] flex-col items-center justify-start rounded-md border p-1 text-sm transition-colors hover:bg-muted/60 ${
+                      today ? "border-primary bg-primary/10" : "border-border/60 bg-background"
+                    }`}
+                  >
+                    <span className="font-medium tabular-nums">{cell.day}</span>
+                    {density > 0 ? (
+                      <span className="mt-1 flex min-h-[0.875rem] items-center justify-center gap-0.5">
+                        {density <= 3
+                          ? Array.from({ length: density }, (_, di) => (
+                              <span key={di} className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+                            ))
+                          : (
+                              <span className="text-xs font-medium tabular-nums text-primary">{density}</span>
+                            )}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         ) : filteredItems.length === 0 ? (
           <p className="text-muted-foreground">{t("timeline.empty")}</p>
         ) : viewMode === "week" ? (
