@@ -13,9 +13,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
-    # Host access for local `pnpm db:migrate` / GUI clients. Change if 5433 is taken.
+    # Host access for local `pnpm db:migrate` / GUI clients. Default 15432 avoids Windows Hyper-V reserved ranges (5433 often fails with EACCES).
     ports:
-      - "${DB_PUBLISH_PORT:-5433}:5432"
+      - "${DB_PUBLISH_PORT:-15432}:5432"
 
   api:
     build:
