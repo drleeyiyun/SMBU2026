@@ -13,6 +13,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    # Host access for local `pnpm db:migrate` / GUI clients. Change if 5433 is taken.
+    ports:
+      - "${DB_PUBLISH_PORT:-5433}:5432"
 
   api:
     build:
