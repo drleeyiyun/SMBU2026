@@ -6,7 +6,8 @@
     "notifications": "通知",
     "plans": "个人计划",
     "leagueCoordination": "团委统筹",
-    "orgManage": "组织管理"
+    "orgManage": "组织管理",
+    "leagueArchive": "档案审核"
   },
   "login": {
     "title": "登录",
@@ -173,5 +174,53 @@
     "descriptionLabel": "说明",
     "startsAt": "开始时间",
     "endsAt": "结束时间"
+  },
+  "archive": {
+    "title": "学生个人档案",
+    "identity": "身份信息",
+    "identityComplete": "身份信息已填齐",
+    "identityIncomplete": "请补全身份信息与证件照/人像链接",
+    "basic": "基础信息（中/英/俄）",
+    "studentNo": "学号",
+    "saveBasic": "提交基础信息审核",
+    "basicAudit": "基础信息审核状态",
+    "phoneDraftLegacy": "联系方式草稿（旧版）",
+    "volunteer": "志愿服务时长",
+    "totalHours": "累计时长",
+    "claimTitle": "认领统筹志愿活动",
+    "coordinationEventId": "团委统筹活动 ID",
+    "claimedHours": "申报时长（可选）",
+    "claim": "认领",
+    "syncVolunteer": "同步时长",
+    "tags": "能力标签",
+    "categoryTechnical": "技术",
+    "categoryPlanning": "谋划",
+    "categoryManagement": "管理",
+    "categorySports": "体育",
+    "addTag": "添加标签",
+    "tagLabel": "标签文字",
+    "awardsPublic": "已通过荣誉",
+    "awardsMine": "我的提交",
+    "awardTitle": "奖项名称",
+    "proofUrl": "证明材料 URL",
+    "submitAward": "提交荣誉",
+    "status": "状态",
+    "saveIdentity": "保存身份信息",
+    "loading": "加载中…",
+    "live": "实时（SSE）",
+    "poll": "轮询（10 秒）"
+  },
+  "leagueArchive": {
+    "title": "团委 — 档案审核",
+    "pending": "待审核",
+    "noPending": "暂无待审核",
+    "approve": "通过",
+    "reject": "驳回",
+    "reason": "驳回理由（驳回时必填）",
+    "auditLog": "审核记录",
+    "profileBasic": "基础信息",
+    "profileLegacy": "联系方式草稿",
+    "loadError": "加载失败",
+    "forbidden": "仅团委管理员可访问"
   }
 }

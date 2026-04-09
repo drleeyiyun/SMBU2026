@@ -6,7 +6,8 @@
     "notifications": "Notifications",
     "plans": "Plans",
     "leagueCoordination": "League coordination",
-    "orgManage": "Organizations"
+    "orgManage": "Organizations",
+    "leagueArchive": "Archive review"
   },
   "login": {
     "title": "Sign in",
@@ -173,5 +174,53 @@
     "descriptionLabel": "Description",
     "startsAt": "Starts at",
     "endsAt": "Ends at"
+  },
+  "archive": {
+    "title": "Student archive",
+    "identity": "Identity",
+    "identityComplete": "Identity section complete",
+    "identityIncomplete": "Complete all identity fields and photo URLs",
+    "basic": "Basic information (trilingual)",
+    "studentNo": "Student No.",
+    "saveBasic": "Submit basic info for review",
+    "basicAudit": "Basic info review status",
+    "phoneDraftLegacy": "Legacy phone draft (review)",
+    "volunteer": "Volunteer hours",
+    "totalHours": "Total hours",
+    "claimTitle": "Claim volunteer activity",
+    "coordinationEventId": "Coordination event ID",
+    "claimedHours": "Hours override (optional)",
+    "claim": "Claim",
+    "syncVolunteer": "Sync from claims",
+    "tags": "Ability tags",
+    "categoryTechnical": "Technology",
+    "categoryPlanning": "Planning",
+    "categoryManagement": "Management",
+    "categorySports": "Sports",
+    "addTag": "Add tag",
+    "tagLabel": "Label",
+    "awardsPublic": "Approved honors",
+    "awardsMine": "My submissions",
+    "awardTitle": "Title",
+    "proofUrl": "Proof URL",
+    "submitAward": "Submit honor",
+    "status": "Status",
+    "saveIdentity": "Save identity",
+    "loading": "Loading…",
+    "live": "Live updates",
+    "poll": "Polling (10s)"
+  },
+  "leagueArchive": {
+    "title": "Archive review (league)",
+    "pending": "Pending reviews",
+    "noPending": "No pending items",
+    "approve": "Approve",
+    "reject": "Reject",
+    "reason": "Reason (required if reject)",
+    "auditLog": "Audit log",
+    "profileBasic": "Basic profile",
+    "profileLegacy": "Contact draft",
+    "loadError": "Failed to load",
+    "forbidden": "League admin only"
   }
 }

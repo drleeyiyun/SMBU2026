@@ -5,11 +5,14 @@ import { db } from "db";
 import {
   abilityTags,
   awards,
+  leagueCoordinationEvents,
   notifications,
   studentProfiles,
+  studentVolunteerEventClaims,
   volunteerRecords,
 } from "db/schema";
 import { broadcastNotification } from "../lib/notification-broadcast.js";
+import { syncVolunteerRecordsForUser } from "../services/archive-volunteer-sync.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
@@ -31,12 +34,91 @@ function isUuid(s: string): boolean {
   );
 }
 
+const localeTriSchema = z
+  .object({
+    zh: z.string().optional(),
+    en: z.string().optional(),
+    ru: z.string().optional(),
+  })
+  .strict();
+
+const basicI18nSchema = z
+  .object({
+    name: localeTriSchema.optional(),
+    phone: localeTriSchema.optional(),
+    wechat: localeTriSchema.optional(),
+    email: localeTriSchema.optional(),
+    github: localeTriSchema.optional(),
+    weibo: localeTriSchema.optional(),
+  })
+  .strict();
+
+const BASIC_KEYS = ["name", "phone", "wechat", "email", "github", "weibo"] as const;
+type BasicKey = (typeof BASIC_KEYS)[number];
+type BasicI18n = Partial<Record<BasicKey, { zh?: string; en?: string; ru?: string }>>;
+
+function parseBasicI18n(raw: unknown): BasicI18n {
+  if (raw === null || typeof raw !== "object") return {};
+  const o = raw as Record<string, unknown>;
+  const out: BasicI18n = {};
+  for (const k of BASIC_KEYS) {
+    const v = o[k];
+    if (v === null || typeof v !== "object") continue;
+    const tri = v as Record<string, unknown>;
+    out[k] = {
+      zh: typeof tri.zh === "string" ? tri.zh : undefined,
+      en: typeof tri.en === "string" ? tri.en : undefined,
+      ru: typeof tri.ru === "string" ? tri.ru : undefined,
+    };
+  }
+  return out;
+}
+
+function mergeBasicI18n(base: BasicI18n, patch: BasicI18n): BasicI18n {
+  const out: BasicI18n = { ...base };
+  for (const k of BASIC_KEYS) {
+    const p = patch[k];
+    if (!p) continue;
+    const prev = out[k] ?? {};
+    out[k] = { ...prev, ...p };
+  }
+  return out;
+}
+
+function triPhoneEmailFromBasic(
+  published: BasicI18n,
+): { phone: string | null; wechat: string | null } {
+  const phone = published.phone?.zh ?? published.phone?.en ?? published.phone?.ru ?? null;
+  const wechat = published.wechat?.zh ?? published.wechat?.en ?? published.wechat?.ru ?? null;
+  return {
+    phone: phone && phone.trim() ? phone.trim() : null,
+    wechat: wechat && wechat.trim() ? wechat.trim() : null,
+  };
+}
+
 const patchMeSchema = z
   .object({
     profileDraftPhone: z.union([z.string(), z.null()]).optional(),
     profileDraftWechat: z.union([z.string(), z.null()]).optional(),
     github: z.union([z.string(), z.null()]).optional(),
     weibo: z.union([z.string(), z.null()]).optional(),
+    basicI18nDraft: basicI18nSchema.optional(),
+    studentNo: z.union([z.string().min(1), z.null()]).optional(),
+    nationality: z.union([z.string(), z.null()]).optional(),
+    idNumber: z.union([z.string(), z.null()]).optional(),
+    grade: z.union([z.string(), z.null()]).optional(),
+    department: z.union([z.string(), z.null()]).optional(),
+    major: z.union([z.string(), z.null()]).optional(),
+    className: z.union([z.string(), z.null()]).optional(),
+    idPhotoUrl: z.union([z.string(), z.null()]).optional(),
+    portraitUrl: z.union([z.string(), z.null()]).optional(),
+  })
+  .strict();
+
+const volunteerClaimSchema = z
+  .object({
+    coordinationEventId: z.string().uuid(),
+    claimedHours: z.number().positive().optional(),
   })
   .strict();
 
@@ -70,9 +152,25 @@ const abilityCreateSchema = z
 
 type ProfileRow = typeof studentProfiles.$inferSelect;
 
+function identityCompleteRow(p: ProfileRow): boolean {
+  const fields = [
+    p.nationality,
+    p.idNumber,
+    p.grade,
+    p.department,
+    p.major,
+    p.className,
+    p.volunteerNumber,
+    p.idPhotoUrl,
+    p.portraitUrl,
+  ];
+  return fields.every((x) => typeof x === "string" && x.trim().length > 0);
+}
+
 function profileToJson(p: ProfileRow) {
   return {
     userId: p.userId,
+    studentNo: p.studentNo,
     volunteerNumber: p.volunteerNumber,
     nationality: p.nationality,
     idNumber: p.idNumber,
@@ -90,6 +188,10 @@ function profileToJson(p: ProfileRow) {
     profileDraftWechat: p.profileDraftWechat,
     profileAuditStatus: p.profileAuditStatus,
     profileAuditReason: p.profileAuditReason,
+    basicI18nPublished: parseBasicI18n(p.basicI18nPublished),
+    basicI18nDraft: p.basicI18nDraft === null ? null : parseBasicI18n(p.basicI18nDraft),
+    basicAuditStatus: p.basicAuditStatus,
+    basicAuditReason: p.basicAuditReason,
   };
 }
 
@@ -184,23 +286,30 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       occurredAt: r.occurredAt.toISOString(),
     }));
 
+    const myAwards = awardRows.map((a) => ({
+      id: a.id,
+      title: a.title,
+      proofUrl: a.proofUrl,
+      status: a.status,
+      reason: a.reason,
+      decidedAt: a.decidedAt?.toISOString() ?? null,
+      createdAt: a.createdAt.toISOString(),
+    }));
+
+    const publicAwards = myAwards.filter((a) => a.status === "approved");
+
     return c.json({
       profile: profileToJson(profile),
+      identityComplete: identityCompleteRow(profile),
       abilityTags: tags.map((t) => ({
         id: t.id,
         category: t.category,
         label: t.label,
       })),
       abilityTagsByCategory: groupAbilityTags(tags),
-      awards: awardRows.map((a) => ({
-        id: a.id,
-        title: a.title,
-        proofUrl: a.proofUrl,
-        status: a.status,
-        reason: a.reason,
-        decidedAt: a.decidedAt?.toISOString() ?? null,
-        createdAt: a.createdAt.toISOString(),
-      })),
+      awards: myAwards,
+      myAwards,
+      publicAwards,
       volunteerSummary: {
         totalHours: sumVolunteerHours(vr),
         records: volunteerRecordsOut,
@@ -211,7 +320,7 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     const userId = c.get("userId")!;
 
     const [existing] = await db
-      .select({ userId: studentProfiles.userId })
+      .select()
       .from(studentProfiles)
       .where(eq(studentProfiles.userId, userId))
       .limit(1);
@@ -236,18 +345,11 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: "No fields to update" }, 400);
     }
 
-    const draftTouched =
+    const profileDraftTouched =
       Object.prototype.hasOwnProperty.call(data, "profileDraftPhone") ||
       Object.prototype.hasOwnProperty.call(data, "profileDraftWechat");
 
-    const updates: Partial<{
-      profileDraftPhone: string | null;
-      profileDraftWechat: string | null;
-      github: string | null;
-      weibo: string | null;
-      profileAuditStatus: string;
-      profileAuditReason: null;
-    }> = {};
+    const updates: Record<string, unknown> = {};
 
     if (data.profileDraftPhone !== undefined) {
       updates.profileDraftPhone = data.profileDraftPhone;
@@ -261,13 +363,62 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     if (data.weibo !== undefined) {
       updates.weibo = data.weibo;
     }
+    if (data.studentNo !== undefined) {
+      updates.studentNo = data.studentNo;
+    }
+    if (data.nationality !== undefined) {
+      updates.nationality = data.nationality;
+    }
+    if (data.idNumber !== undefined) {
+      updates.idNumber = data.idNumber;
+    }
+    if (data.grade !== undefined) {
+      updates.grade = data.grade;
+    }
+    if (data.department !== undefined) {
+      updates.department = data.department;
+    }
+    if (data.major !== undefined) {
+      updates.major = data.major;
+    }
+    if (data.className !== undefined) {
+      updates.className = data.className;
+    }
+    if (data.idPhotoUrl !== undefined) {
+      updates.idPhotoUrl = data.idPhotoUrl;
+    }
+    if (data.portraitUrl !== undefined) {
+      updates.portraitUrl = data.portraitUrl;
+    }
 
-    if (draftTouched) {
+    if (data.basicI18nDraft !== undefined) {
+      const published = parseBasicI18n(existing.basicI18nPublished);
+      const priorDraft =
+        existing.basicI18nDraft === null ? published : parseBasicI18n(existing.basicI18nDraft);
+      const merged = mergeBasicI18n(priorDraft, parseBasicI18n(data.basicI18nDraft));
+      const draftObj: Record<string, { zh?: string; en?: string; ru?: string }> = {};
+      for (const k of BASIC_KEYS) {
+        const t = merged[k];
+        if (t) draftObj[k] = t;
+      }
+      updates.basicI18nDraft = draftObj;
+      updates.basicAuditStatus = "pending";
+      updates.basicAuditReason = null;
+    }
+
+    if (profileDraftTouched) {
       updates.profileAuditStatus = "pending";
       updates.profileAuditReason = null;
     }
 
-    await db.update(studentProfiles).set(updates).where(eq(studentProfiles.userId, userId));
+    if (Object.keys(updates).length === 0) {
+      return c.json({ error: "No fields to update" }, 400);
+    }
+
+    await db
+      .update(studentProfiles)
+      .set(updates as Partial<typeof existing>)
+      .where(eq(studentProfiles.userId, userId));
 
     const [profile] = await db
       .select()
@@ -276,6 +427,89 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       .limit(1);
 
     return c.json({ profile: profileToJson(profile!) });
+  })
+  .post("/volunteer-claims", requireUser, async (c) => {
+    const userId = c.get("userId")!;
+
+    const [profile] = await db
+      .select({ userId: studentProfiles.userId })
+      .from(studentProfiles)
+      .where(eq(studentProfiles.userId, userId))
+      .limit(1);
+
+    if (!profile) {
+      return c.json({ error: "Student profile not found" }, 404);
+    }
+
+    const raw = await parseJsonBody(c);
+    if (raw === null || typeof raw !== "object") {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+
+    const parsed = volunteerClaimSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+    }
+
+    const { coordinationEventId, claimedHours } = parsed.data;
+
+    const [event] = await db
+      .select()
+      .from(leagueCoordinationEvents)
+      .where(eq(leagueCoordinationEvents.id, coordinationEventId))
+      .limit(1);
+
+    if (!event) {
+      return c.json({ error: "Coordination event not found" }, 404);
+    }
+
+    if (event.category !== "volunteer") {
+      return c.json({ error: "Event is not a volunteer activity" }, 400);
+    }
+
+    const hoursVal =
+      claimedHours !== undefined ? claimedHours.toFixed(2) : null;
+
+    await db
+      .insert(studentVolunteerEventClaims)
+      .values({
+        userId,
+        coordinationEventId,
+        claimedHours: hoursVal,
+      })
+      .onConflictDoUpdate({
+        target: [
+          studentVolunteerEventClaims.userId,
+          studentVolunteerEventClaims.coordinationEventId,
+        ],
+        set: {
+          claimedHours:
+            claimedHours !== undefined
+              ? sql`excluded.claimed_hours`
+              : sql`${studentVolunteerEventClaims.claimedHours}`,
+        },
+      });
+
+    const { upserted } = await syncVolunteerRecordsForUser(userId);
+
+    return c.json({ ok: true, upserted });
+  })
+  .post("/volunteer-sync", requireUser, async (c) => {
+    const userId = c.get("userId")!;
+
+    const [profile] = await db
+      .select({ userId: studentProfiles.userId })
+      .from(studentProfiles)
+      .where(eq(studentProfiles.userId, userId))
+      .limit(1);
+
+    if (!profile) {
+      return c.json({ error: "Student profile not found" }, 404);
+    }
+
+    const { upserted } = await syncVolunteerRecordsForUser(userId);
+
+    return c.json({ upserted });
   })
   .post("/reviews/:userId", requireUser, requireRoles("league_admin"), async (c) => {
     const targetUserId = c.req.param("userId");
@@ -310,61 +544,134 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: "Student profile not found" }, 404);
     }
 
-    if (profile.profileAuditStatus !== "pending") {
+    const basicPending = profile.basicAuditStatus === "pending";
+    const legacyPending = profile.profileAuditStatus === "pending";
+
+    if (!basicPending && !legacyPending) {
       return c.json({ error: "No pending profile change to review" }, 409);
     }
 
     const decidedAt = new Date();
 
-    let insertedNotification: (typeof notifications.$inferSelect) | undefined;
+    const notificationsOut: (typeof notifications.$inferSelect)[] = [];
 
     await db.transaction(async (tx) => {
-      if (action === "approve") {
-        const nextPhone =
-          profile.profileDraftPhone !== null ? profile.profileDraftPhone : profile.phone;
-        const nextWechat =
-          profile.profileDraftWechat !== null ? profile.profileDraftWechat : profile.wechat;
+      if (basicPending) {
+        if (action === "approve") {
+          const draftParsed =
+            profile.basicI18nDraft === null
+              ? parseBasicI18n(profile.basicI18nPublished)
+              : parseBasicI18n(profile.basicI18nDraft);
+          const draftObj: Record<string, { zh?: string; en?: string; ru?: string }> = {};
+          for (const k of BASIC_KEYS) {
+            const t = draftParsed[k];
+            if (t) draftObj[k] = t;
+          }
+          const { phone: pubPhone, wechat: pubWechat } = triPhoneEmailFromBasic(draftParsed);
+          await tx
+            .update(studentProfiles)
+            .set({
+              basicI18nPublished: draftObj,
+              basicI18nDraft: null,
+              basicAuditStatus: "approved",
+              basicAuditReason: null,
+              phone: pubPhone ?? profile.phone,
+              wechat: pubWechat ?? profile.wechat,
+            })
+            .where(eq(studentProfiles.userId, targetUserId));
+        } else {
+          await tx
+            .update(studentProfiles)
+            .set({
+              basicAuditStatus: "rejected",
+              basicAuditReason: reason!.trim(),
+            })
+            .where(eq(studentProfiles.userId, targetUserId));
+        }
 
-        await tx
-          .update(studentProfiles)
-          .set({
-            phone: nextPhone,
-            wechat: nextWechat,
-            profileDraftPhone: null,
-            profileDraftWechat: null,
-            profileAuditStatus: "approved",
-            profileAuditReason: null,
+        const [row] = await tx
+          .insert(notifications)
+          .values({
+            userId: targetUserId,
+            type: "archive_audit",
+            payloadJson: JSON.stringify({
+              scope: "profile_basic",
+              action,
+              reason: action === "reject" ? reason!.trim() : null,
+              reviewerUserId: reviewerId,
+              decidedAt: decidedAt.toISOString(),
+            }),
           })
-          .where(eq(studentProfiles.userId, targetUserId));
-      } else {
-        await tx
-          .update(studentProfiles)
-          .set({
-            profileAuditStatus: "rejected",
-            profileAuditReason: reason!.trim(),
-          })
-          .where(eq(studentProfiles.userId, targetUserId));
+          .returning();
+        if (row) notificationsOut.push(row);
       }
 
-      const [row] = await tx
-        .insert(notifications)
-        .values({
-          userId: targetUserId,
-          type: "archive_audit",
-          payloadJson: JSON.stringify({
-            scope: "profile",
-            action,
-            reason: action === "reject" ? reason!.trim() : null,
-            reviewerUserId: reviewerId,
-            decidedAt: decidedAt.toISOString(),
-          }),
-        })
-        .returning();
-      insertedNotification = row;
+      if (legacyPending && (action === "approve" || !basicPending)) {
+        if (action === "reject" && basicPending) {
+          /* basic rejection already applied; legacy still pending */
+        } else if (action === "approve") {
+          const nextPhone =
+            profile.profileDraftPhone !== null ? profile.profileDraftPhone : profile.phone;
+          const nextWechat =
+            profile.profileDraftWechat !== null ? profile.profileDraftWechat : profile.wechat;
+
+          await tx
+            .update(studentProfiles)
+            .set({
+              phone: nextPhone,
+              wechat: nextWechat,
+              profileDraftPhone: null,
+              profileDraftWechat: null,
+              profileAuditStatus: "approved",
+              profileAuditReason: null,
+            })
+            .where(eq(studentProfiles.userId, targetUserId));
+
+          const [row] = await tx
+            .insert(notifications)
+            .values({
+              userId: targetUserId,
+              type: "archive_audit",
+              payloadJson: JSON.stringify({
+                scope: "profile",
+                action: "approve",
+                reason: null,
+                reviewerUserId: reviewerId,
+                decidedAt: decidedAt.toISOString(),
+              }),
+            })
+            .returning();
+          if (row) notificationsOut.push(row);
+        } else {
+          await tx
+            .update(studentProfiles)
+            .set({
+              profileAuditStatus: "rejected",
+              profileAuditReason: reason!.trim(),
+            })
+            .where(eq(studentProfiles.userId, targetUserId));
+
+          const [row] = await tx
+            .insert(notifications)
+            .values({
+              userId: targetUserId,
+              type: "archive_audit",
+              payloadJson: JSON.stringify({
+                scope: "profile",
+                action,
+                reason: action === "reject" ? reason!.trim() : null,
+                reviewerUserId: reviewerId,
+                decidedAt: decidedAt.toISOString(),
+              }),
+            })
+            .returning();
+          if (row) notificationsOut.push(row);
+        }
+      }
     });
 
-    if (insertedNotification) {
-      broadcastNotification(insertedNotification);
+    for (const n of notificationsOut) {
+      broadcastNotification(n);
     }
 
     const [updated] = await db

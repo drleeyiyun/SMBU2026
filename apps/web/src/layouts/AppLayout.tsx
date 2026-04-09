@@ -36,9 +36,14 @@ export default function AppLayout() {
               {t("nav.plans")}
             </NavLink>
             {showLeagueCoordination ? (
-              <NavLink to="/app/league/coordination" className={linkClass}>
-                {t("nav.leagueCoordination")}
-              </NavLink>
+              <>
+                <NavLink to="/app/league/archive" className={linkClass}>
+                  {t("nav.leagueArchive")}
+                </NavLink>
+                <NavLink to="/app/league/coordination" className={linkClass}>
+                  {t("nav.leagueCoordination")}
+                </NavLink>
+              </>
             ) : null}
             {showOrgManage ? (
               <NavLink to="/app/league/orgs" className={linkClass}>

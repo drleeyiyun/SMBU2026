@@ -39,6 +39,7 @@ async function main(): Promise<void> {
     await tx.delete(schema.orgRevisions);
     await tx.delete(schema.orgMemberships);
     await tx.delete(schema.volunteerRecords);
+    await tx.delete(schema.studentVolunteerEventClaims);
     await tx.delete(schema.scheduleItemsCache);
     await tx.delete(schema.abilityTags);
     await tx.delete(schema.awards);
@@ -123,6 +124,7 @@ async function main(): Promise<void> {
 
     await tx.insert(schema.studentProfiles).values({
       userId: student.id,
+      studentNo: "2024001001",
       volunteerNumber: "V20260001",
       nationality: "中国",
       idNumber: "440300200501011234",
@@ -130,6 +132,21 @@ async function main(): Promise<void> {
       department: "计算数学与控制系",
       major: "计算机科学与技术",
       className: "计科2024-1班",
+      idPhotoUrl: "https://files.demo.school/seed/id-photo.png",
+      portraitUrl: "https://files.demo.school/seed/portrait.png",
+      phone: "13800138000",
+      basicI18nPublished: {
+        name: { zh: "演示学生", en: "Demo Student", ru: "Демо Студент" },
+        phone: { zh: "13800138000", en: "13800138000", ru: "13800138000" },
+        wechat: { zh: "demo_wx", en: "demo_wx", ru: "demo_wx" },
+        email: {
+          zh: "student@demo.school",
+          en: "student@demo.school",
+          ru: "student@demo.school",
+        },
+        github: { zh: "demo-student", en: "demo-student", ru: "demo-student" },
+        weibo: { zh: "demo_weibo", en: "demo_weibo", ru: "demo_weibo" },
+      },
     });
 
     await tx.insert(schema.volunteerRecords).values([
@@ -249,24 +266,33 @@ async function main(): Promise<void> {
     const volunteerEnd = new Date(volunteerStart);
     volunteerEnd.setUTCHours(12, 0, 0, 0);
 
-    await tx.insert(schema.leagueCoordinationEvents).values([
-      {
-        title: "各社团代表队联合训练",
-        description: "体育馆羽毛球场，请提前十分钟到场签到。",
-        category: "practice",
-        startsAt: practiceStart,
-        endsAt: practiceEnd,
-        createdByUserId: league.id,
-      },
-      {
+    await tx.insert(schema.leagueCoordinationEvents).values({
+      title: "各社团代表队联合训练",
+      description: "体育馆羽毛球场，请提前十分钟到场签到。",
+      category: "practice",
+      startsAt: practiceStart,
+      endsAt: practiceEnd,
+      createdByUserId: league.id,
+    });
+
+    const [volunteerCoordinationEvent] = await tx
+      .insert(schema.leagueCoordinationEvents)
+      .values({
         title: "校园志愿服务协调会",
         description: "汇总本周各组织志愿活动安排，避免时间冲突。",
         category: "volunteer",
         startsAt: volunteerStart,
         endsAt: volunteerEnd,
         createdByUserId: league.id,
-      },
-    ]);
+      })
+      .returning({ id: schema.leagueCoordinationEvents.id });
+
+    if (volunteerCoordinationEvent) {
+      await tx.insert(schema.studentVolunteerEventClaims).values({
+        userId: student.id,
+        coordinationEventId: volunteerCoordinationEvent.id,
+      });
+    }
   });
 
   console.log("seed done");

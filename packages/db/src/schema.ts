@@ -6,11 +6,13 @@ import {
   boolean,
   integer,
   numeric,
+  jsonb,
   pgEnum,
   uniqueIndex,
   index,
   primaryKey,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const localeEnum = pgEnum("locale", ["zh", "en", "ru"]);
 export const userRoleEnum = pgEnum("user_role", [
@@ -210,8 +212,18 @@ export const studentProfiles = pgTable(
     profileDraftWechat: text("profile_draft_wechat"),
     profileAuditStatus: text("profile_audit_status").notNull().default("none"),
     profileAuditReason: text("profile_audit_reason"),
+    studentNo: text("student_no"),
+    basicI18nPublished: jsonb("basic_i18n_published")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    basicI18nDraft: jsonb("basic_i18n_draft"),
+    basicAuditStatus: text("basic_audit_status").notNull().default("none"),
+    basicAuditReason: text("basic_audit_reason"),
   },
-  (t) => [uniqueIndex("volunteer_number_uidx").on(t.volunteerNumber)]
+  (t) => [
+    uniqueIndex("volunteer_number_uidx").on(t.volunteerNumber),
+    uniqueIndex("student_no_uidx").on(t.studentNo).where(sql`${t.studentNo} IS NOT NULL`),
+  ]
 );
 
 export const abilityTagCategoryEnum = pgEnum("ability_tag_category", [
@@ -257,7 +269,12 @@ export const volunteerRecords = pgTable(
     externalRef: text("external_ref"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   },
-  (t) => [index("vr_volunteer_number_idx").on(t.volunteerNumber)]
+  (t) => [
+    index("vr_volunteer_number_idx").on(t.volunteerNumber),
+    uniqueIndex("vr_volunteer_external_uidx")
+      .on(t.volunteerNumber, t.externalRef)
+      .where(sql`${t.externalRef} IS NOT NULL`),
+  ]
 );
 
 export const personalPlans = pgTable("personal_plans", {
@@ -332,4 +349,19 @@ export const leagueCoordinationEvents = pgTable(
   (t) => [
     index("league_coordination_range_idx").on(t.startsAt, t.endsAt),
   ],
+);
+
+export const studentVolunteerEventClaims = pgTable(
+  "student_volunteer_event_claims",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    coordinationEventId: uuid("coordination_event_id")
+      .notNull()
+      .references(() => leagueCoordinationEvents.id, { onDelete: "cascade" }),
+    claimedHours: numeric("claimed_hours", { precision: 8, scale: 2 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.coordinationEventId] })],
 );

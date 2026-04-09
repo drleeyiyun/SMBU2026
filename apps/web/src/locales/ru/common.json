@@ -6,7 +6,8 @@
     "notifications": "Уведомления",
     "plans": "Личные планы",
     "leagueCoordination": "Координация комсомольской организации",
-    "orgManage": "Организации"
+    "orgManage": "Организации",
+    "leagueArchive": "Проверка архивов"
   },
   "login": {
     "title": "Вход",
@@ -173,5 +174,53 @@
     "descriptionLabel": "Описание",
     "startsAt": "Начало",
     "endsAt": "Окончание"
+  },
+  "archive": {
+    "title": "Личный архив студента",
+    "identity": "Удостоверение личности",
+    "identityComplete": "Раздел заполнен",
+    "identityIncomplete": "Заполните все поля и ссылки на фото",
+    "basic": "Основные данные (ZH/EN/RU)",
+    "studentNo": "Номер студента",
+    "saveBasic": "Отправить на проверку",
+    "basicAudit": "Статус проверки основных данных",
+    "phoneDraftLegacy": "Черновик телефона (старый)",
+    "volunteer": "Волонтёрские часы",
+    "totalHours": "Всего часов",
+    "claimTitle": "Заявить мероприятие",
+    "coordinationEventId": "ID события координации",
+    "claimedHours": "Часы (необяз.)",
+    "claim": "Заявить",
+    "syncVolunteer": "Синхронизировать",
+    "tags": "Навыки",
+    "categoryTechnical": "Технологии",
+    "categoryPlanning": "Планирование",
+    "categoryManagement": "Управление",
+    "categorySports": "Спорт",
+    "addTag": "Добавить",
+    "tagLabel": "Метка",
+    "awardsPublic": "Утверждённые награды",
+    "awardsMine": "Мои заявки",
+    "awardTitle": "Название",
+    "proofUrl": "URL доказательства",
+    "submitAward": "Отправить",
+    "status": "Статус",
+    "saveIdentity": "Сохранить",
+    "loading": "Загрузка…",
+    "live": "SSE",
+    "poll": "Опрос 10 с"
+  },
+  "leagueArchive": {
+    "title": "Проверка архивов",
+    "pending": "Ожидают",
+    "noPending": "Нет записей",
+    "approve": "Одобрить",
+    "reject": "Отклонить",
+    "reason": "Причина",
+    "auditLog": "Журнал",
+    "profileBasic": "Основные данные",
+    "profileLegacy": "Черновик контактов",
+    "loadError": "Ошибка загрузки",
+    "forbidden": "Только лига"
   }
 }

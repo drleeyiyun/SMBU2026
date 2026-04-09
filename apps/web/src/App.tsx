@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout";
 import ArchivePage from "./pages/ArchivePage";
 import LoginPage from "./pages/LoginPage";
+import LeagueArchivePage from "./pages/LeagueArchivePage";
 import LeagueCoordinationPage from "./pages/LeagueCoordinationPage";
 import OrgManagePage from "./pages/OrgManagePage";
 import NotificationsPage from "./pages/NotificationsPage";
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="archive" element={<ArchivePage />} />
         <Route path="timeline" element={<TimelinePage />} />
         <Route path="plans" element={<PlansPage />} />
+        <Route path="league/archive" element={<LeagueArchivePage />} />
         <Route path="league/coordination" element={<LeagueCoordinationPage />} />
         <Route path="league/orgs" element={<OrgManagePage />} />
         <Route path="oa" element={<OaPage />} />
