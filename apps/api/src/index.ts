@@ -7,6 +7,7 @@ import type { AuthVariables } from "./middleware/session.js";
 import { requireUser, sessionMiddleware } from "./middleware/session.js";
 import { archiveRouter } from "./routes/archive.js";
 import { authRouter, me } from "./routes/auth.js";
+import { directoryRouter } from "./routes/directory.js";
 import { leagueRouter } from "./routes/league.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { orgsRouter } from "./routes/orgs.js";
@@ -43,6 +44,7 @@ app.route("/plans", plansRouter);
 app.route("/archive", archiveRouter);
 
 app.route("/orgs", orgsRouter);
+app.route("/directory", directoryRouter);
 app.route("/tasks", tasksRouter);
 
 app.route("/notifications", notificationsRouter);

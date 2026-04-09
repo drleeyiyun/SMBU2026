@@ -68,6 +68,40 @@ export const orgRevisions = pgTable("organization_revisions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const orgLeadershipChangeKindEnum = pgEnum("org_leadership_change_kind", [
+  "advisor_updated",
+  "member_added",
+  "member_removed",
+  "member_title_updated",
+]);
+
+export const orgLifecycleEvents = pgTable("org_lifecycle_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  fromStatus: orgLifecycleEnum("from_status"),
+  toStatus: orgLifecycleEnum("to_status").notNull(),
+  actorUserId: uuid("actor_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  reason: text("reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const orgLeadershipEvents = pgTable("org_leadership_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  actorUserId: uuid("actor_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  changeKind: orgLeadershipChangeKindEnum("change_kind").notNull(),
+  payloadJson: text("payload_json").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const orgMemberships = pgTable(
   "org_memberships",
   {

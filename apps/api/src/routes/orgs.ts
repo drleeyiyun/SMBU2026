@@ -1,8 +1,9 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "db";
 import {
+  orgLeadershipEvents,
   orgMemberships,
   organizations,
   orgRevisions,
@@ -10,6 +11,7 @@ import {
   orgTasks,
   orgTaskAssignments,
   userRoles,
+  users,
 } from "db/schema";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
@@ -122,6 +124,51 @@ async function hasPendingRevisionForOrg(orgId: string): Promise<boolean> {
     .limit(1);
   return !!row;
 }
+
+async function canManageOrgRoster(userId: string, orgId: string): Promise<boolean> {
+  if (await isLeagueAdmin(userId)) return true;
+  const inOrg = await userInOrg(userId, orgId);
+  if (!inOrg) return false;
+  const leadership = await db
+    .select({ role: userRoles.role })
+    .from(userRoles)
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        inArray(userRoles.role, ["org_president", "org_officer"] as const),
+      ),
+    )
+    .limit(1);
+  return leadership.length > 0;
+}
+
+async function userHasInstructorRole(uid: string): Promise<boolean> {
+  const [row] = await db
+    .select({ role: userRoles.role })
+    .from(userRoles)
+    .where(and(eq(userRoles.userId, uid), eq(userRoles.role, "instructor")))
+    .limit(1);
+  return !!row;
+}
+
+const advisorPatchSchema = z
+  .object({
+    advisorUserId: z.union([z.string().uuid(), z.null()]),
+  })
+  .strict();
+
+const memberPostSchema = z
+  .object({
+    userId: z.string().uuid(),
+    title: z.union([z.string(), z.null()]).optional(),
+  })
+  .strict();
+
+const memberPatchSchema = z
+  .object({
+    title: z.union([z.string(), z.null()]),
+  })
+  .strict();
 
 export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
   .use("*", sessionMiddleware)
@@ -323,11 +370,6 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
           .where(eq(orgRevisions.id, revisionId));
       } else {
         await tx
-          .update(organizations)
-          .set({ lifecycleStatus: "suspended" })
-          .where(eq(organizations.id, revision.orgId));
-
-        await tx
           .update(orgRevisions)
           .set({
             status: "rejected",
@@ -361,6 +403,229 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
         decidedAt: updatedRev!.decidedAt?.toISOString() ?? null,
       },
     });
+  })
+  .patch("/:orgId/advisor", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    if (!isUuid(orgId)) {
+      return c.json({ error: "Invalid org id" }, 400);
+    }
+    const actorId = c.get("userId")!;
+    if (!(await canManageOrgRoster(actorId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+    const raw = await parseJsonBody(c);
+    if (raw === null || typeof raw !== "object") {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const parsed = advisorPatchSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+    }
+    const { advisorUserId } = parsed.data;
+    if (advisorUserId !== null) {
+      const [advUser] = await db.select().from(users).where(eq(users.id, advisorUserId)).limit(1);
+      if (!advUser) {
+        return c.json({ error: "Advisor user not found" }, 400);
+      }
+      if (!(await userHasInstructorRole(advisorUserId))) {
+        return c.json({ error: "Advisor must be a user with instructor role" }, 400);
+      }
+    }
+    const prevAdvisorId = org.advisorUserId;
+    if (prevAdvisorId === advisorUserId || (prevAdvisorId === null && advisorUserId === null)) {
+      return c.json({ organization: orgToJson(org) });
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(organizations)
+        .set({ advisorUserId })
+        .where(eq(organizations.id, orgId));
+      await tx.insert(orgLeadershipEvents).values({
+        orgId,
+        actorUserId: actorId,
+        changeKind: "advisor_updated",
+        payloadJson: JSON.stringify({
+          advisorUserPrev: prevAdvisorId,
+          advisorUserNext: advisorUserId,
+        }),
+      });
+    });
+
+    const [updated] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    return c.json({ organization: orgToJson(updated!) });
+  })
+  .get("/:orgId/leadership-events", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    if (!isUuid(orgId)) {
+      return c.json({ error: "Invalid org id" }, 400);
+    }
+    const userId = c.get("userId")!;
+    if (!(await canManageOrgRoster(userId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const rows = await db
+      .select()
+      .from(orgLeadershipEvents)
+      .where(eq(orgLeadershipEvents.orgId, orgId))
+      .orderBy(desc(orgLeadershipEvents.createdAt))
+      .limit(100);
+
+    return c.json({
+      events: rows.map((e) => ({
+        id: e.id,
+        orgId: e.orgId,
+        actorUserId: e.actorUserId,
+        changeKind: e.changeKind,
+        payload: JSON.parse(e.payloadJson) as unknown,
+        createdAt: e.createdAt.toISOString(),
+      })),
+    });
+  })
+  .post("/:orgId/members", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    if (!isUuid(orgId)) {
+      return c.json({ error: "Invalid org id" }, 400);
+    }
+    const actorId = c.get("userId")!;
+    if (!(await canManageOrgRoster(actorId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+    const raw = await parseJsonBody(c);
+    if (raw === null || typeof raw !== "object") {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const parsed = memberPostSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+    }
+    const { userId: memberUserId, title } = parsed.data;
+    const [u] = await db.select().from(users).where(eq(users.id, memberUserId)).limit(1);
+    if (!u) {
+      return c.json({ error: "User not found" }, 400);
+    }
+    const [existing] = await db
+      .select()
+      .from(orgMemberships)
+      .where(and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, memberUserId)))
+      .limit(1);
+    if (existing) {
+      return c.json({ error: "User is already a member of this organization" }, 409);
+    }
+
+    const titleVal = title === undefined ? null : title;
+    await db.transaction(async (tx) => {
+      await tx.insert(orgMemberships).values({
+        orgId,
+        userId: memberUserId,
+        title: titleVal,
+      });
+      await tx.insert(orgLeadershipEvents).values({
+        orgId,
+        actorUserId: actorId,
+        changeKind: "member_added",
+        payloadJson: JSON.stringify({ userId: memberUserId, title: titleVal }),
+      });
+    });
+
+    return c.json(
+      {
+        membership: { orgId, userId: memberUserId, title: titleVal },
+      },
+      201,
+    );
+  })
+  .patch("/:orgId/members/:memberUserId", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    const memberUserId = c.req.param("memberUserId");
+    if (!isUuid(orgId) || !isUuid(memberUserId)) {
+      return c.json({ error: "Invalid id" }, 400);
+    }
+    const actorId = c.get("userId")!;
+    if (!(await canManageOrgRoster(actorId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const raw = await parseJsonBody(c);
+    if (raw === null || typeof raw !== "object") {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const parsed = memberPatchSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+    }
+    const { title } = parsed.data;
+    const [row] = await db
+      .select()
+      .from(orgMemberships)
+      .where(and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, memberUserId)))
+      .limit(1);
+    if (!row) {
+      return c.json({ error: "Membership not found" }, 404);
+    }
+    const prevTitle = row.title;
+    if (prevTitle === title) {
+      return c.json({ membership: { orgId, userId: memberUserId, title } });
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(orgMemberships)
+        .set({ title })
+        .where(and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, memberUserId)));
+      await tx.insert(orgLeadershipEvents).values({
+        orgId,
+        actorUserId: actorId,
+        changeKind: "member_title_updated",
+        payloadJson: JSON.stringify({
+          userId: memberUserId,
+          titlePrev: prevTitle,
+          titleNext: title,
+        }),
+      });
+    });
+
+    return c.json({ membership: { orgId, userId: memberUserId, title } });
+  })
+  .delete("/:orgId/members/:memberUserId", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    const memberUserId = c.req.param("memberUserId");
+    if (!isUuid(orgId) || !isUuid(memberUserId)) {
+      return c.json({ error: "Invalid id" }, 400);
+    }
+    const actorId = c.get("userId")!;
+    if (!(await canManageOrgRoster(actorId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [row] = await db
+      .select()
+      .from(orgMemberships)
+      .where(and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, memberUserId)))
+      .limit(1);
+    if (!row) {
+      return c.json({ error: "Membership not found" }, 404);
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(orgMemberships)
+        .where(and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, memberUserId)));
+      await tx.insert(orgLeadershipEvents).values({
+        orgId,
+        actorUserId: actorId,
+        changeKind: "member_removed",
+        payloadJson: JSON.stringify({ userId: memberUserId, title: row.title }),
+      });
+    });
+
+    return c.json({ ok: true });
   })
   .post("/:orgId/tasks", requireUser, async (c) => {
     const orgId = c.req.param("orgId");

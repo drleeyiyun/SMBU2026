@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "db";
 import {
   notifications,
+  orgMemberships,
   orgTaskAssignments,
   orgTaskHandoffs,
   orgTaskInvolvedOrgs,
@@ -11,7 +12,9 @@ import {
   orgTasks,
   userRoles,
 } from "db/schema";
+import { broadcastOrgTaskRefreshForTask } from "../lib/org-task-broadcast.js";
 import { broadcastNotification } from "../lib/notification-broadcast.js";
+import { mergeTaskTimelineItems } from "../lib/task-timeline.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
@@ -76,6 +79,42 @@ function taskToJson(t: typeof orgTasks.$inferSelect) {
   };
 }
 
+async function canViewTaskTimeline(actorId: string, taskId: string): Promise<boolean> {
+  if (await isLeagueAdmin(actorId)) return true;
+  const [task] = await db.select().from(orgTasks).where(eq(orgTasks.id, taskId)).limit(1);
+  if (!task) return false;
+  if (task.createdByUserId === actorId) return true;
+  const [asAssignee] = await db
+    .select({ id: orgTaskAssignments.id })
+    .from(orgTaskAssignments)
+    .where(
+      and(eq(orgTaskAssignments.taskId, taskId), eq(orgTaskAssignments.assigneeUserId, actorId)),
+    )
+    .limit(1);
+  if (asAssignee) return true;
+
+  const involvedRows = await db
+    .select({ orgId: orgTaskInvolvedOrgs.orgId })
+    .from(orgTaskInvolvedOrgs)
+    .where(eq(orgTaskInvolvedOrgs.taskId, taskId));
+  const orgIds = [...new Set([task.orgId, ...involvedRows.map((r) => r.orgId)])];
+  if (orgIds.length === 0) return false;
+
+  const officer = await db
+    .select({ userId: orgMemberships.userId })
+    .from(orgMemberships)
+    .innerJoin(userRoles, eq(userRoles.userId, orgMemberships.userId))
+    .where(
+      and(
+        inArray(orgMemberships.orgId, orgIds),
+        eq(orgMemberships.userId, actorId),
+        inArray(userRoles.role, ["org_president", "org_officer"] as const),
+      ),
+    )
+    .limit(1);
+  return officer.length > 0;
+}
+
 export const tasksRouter = new Hono<{ Variables: AuthVariables }>()
   .use("*", sessionMiddleware)
   .get("/mine", requireUser, async (c) => {
@@ -123,6 +162,30 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables }>()
         involvedOrgIds: involvedByTask.get(r.task.id) ?? [],
       })),
     });
+  })
+  .get("/:taskId/timeline", requireUser, async (c) => {
+    const taskId = c.req.param("taskId");
+    if (!isUuid(taskId)) {
+      return c.json({ error: "Invalid task id" }, 400);
+    }
+    const userId = c.get("userId")!;
+    if (!(await canViewTaskTimeline(userId, taskId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [task] = await db.select().from(orgTasks).where(eq(orgTasks.id, taskId)).limit(1);
+    if (!task) {
+      return c.json({ error: "Task not found" }, 404);
+    }
+
+    const statusRows = await db
+      .select()
+      .from(orgTaskStatusEvents)
+      .where(eq(orgTaskStatusEvents.taskId, taskId));
+    const handoffRows = await db.select().from(orgTaskHandoffs).where(eq(orgTaskHandoffs.taskId, taskId));
+
+    const events = mergeTaskTimelineItems(statusRows, handoffRows);
+
+    return c.json({ taskId, events });
   })
   .patch("/assignments/:assignmentId/status", requireUser, async (c) => {
     const assignmentId = c.req.param("assignmentId");
@@ -230,6 +293,8 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables }>()
       broadcastNotification(n);
     }
 
+    await broadcastOrgTaskRefreshForTask(row.task.id);
+
     const [updated] = await db
       .select()
       .from(orgTaskAssignments)
@@ -290,6 +355,8 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables }>()
         note: parsed.data.note === undefined ? null : parsed.data.note,
       })
       .returning();
+
+    await broadcastOrgTaskRefreshForTask(taskId);
 
     return c.json(
       {

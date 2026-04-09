@@ -62,6 +62,54 @@
     "empty": "Планов пока нет",
     "loadError": "Не удалось загрузить планы"
   },
+  "oa": {
+    "tabs": {
+      "mine": "Мои задачи",
+      "league": "Вид лига"
+    },
+    "loading": "Загрузка…",
+    "empty": "Задач нет.",
+    "error": "Не удалось загрузить",
+    "filters": {
+      "org": "Организация",
+      "orgAll": "Все",
+      "status": "Статус",
+      "statusAll": "Все",
+      "kind": "Тип",
+      "kindAll": "Все",
+      "query": "Заголовок содержит",
+      "from": "Создано с",
+      "to": "Создано по",
+      "apply": "Применить"
+    },
+    "stats": {
+      "byStatus": "По статусу назначения",
+      "byKind": "По типу задачи"
+    },
+    "status": {
+      "unread": "Не просмотрено",
+      "read": "Просмотрено",
+      "in_progress": "В работе",
+      "done": "Завершено"
+    },
+    "taskKind": {
+      "single": "Один отдел",
+      "cross": "Межотдельческая",
+      "transfer": "Передача"
+    },
+    "primaryOrg": "Орг.-организатор",
+    "involved": "Участвующие орг.",
+    "expand": "Подробности",
+    "collapse": "Свернуть",
+    "timeline": "Журнал",
+    "timelineEmpty": "Записей нет.",
+    "timelineStatus": "Статус",
+    "timelineHandoff": "Передача",
+    "advanceStatus": "Следующий статус",
+    "doneStatus": "Уже завершено",
+    "liveSse": "Онлайн (SSE)",
+    "livePoll": "Опрос (10 с)"
+  },
   "leagueCoordination": {
     "title": "Координация комсомольской организации",
     "category": "Категория",

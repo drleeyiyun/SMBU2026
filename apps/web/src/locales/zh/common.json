@@ -62,6 +62,54 @@
     "empty": "暂无计划",
     "loadError": "无法加载计划列表"
   },
+  "oa": {
+    "tabs": {
+      "mine": "我的任务",
+      "league": "团委视图"
+    },
+    "loading": "加载中…",
+    "empty": "暂无任务",
+    "error": "加载失败",
+    "filters": {
+      "org": "社团",
+      "orgAll": "全部",
+      "status": "状态",
+      "statusAll": "全部",
+      "kind": "类型",
+      "kindAll": "全部",
+      "query": "标题关键词",
+      "from": "创建起",
+      "to": "创建止",
+      "apply": "应用筛选"
+    },
+    "stats": {
+      "byStatus": "指派状态统计",
+      "byKind": "任务类型统计"
+    },
+    "status": {
+      "unread": "待查看",
+      "read": "已查看",
+      "in_progress": "进行中",
+      "done": "已完成"
+    },
+    "taskKind": {
+      "single": "单部门",
+      "cross": "跨部门协同",
+      "transfer": "上下传导"
+    },
+    "primaryOrg": "主办社团",
+    "involved": "参与社团",
+    "expand": "详情与流转",
+    "collapse": "收起",
+    "timeline": "流转记录",
+    "timelineEmpty": "暂无记录",
+    "timelineStatus": "状态",
+    "timelineHandoff": "交接",
+    "advanceStatus": "推进到下一状态",
+    "doneStatus": "已完成",
+    "liveSse": "实时已连接",
+    "livePoll": "轮询刷新（10 秒）"
+  },
   "leagueCoordination": {
     "title": "团委统筹",
     "category": "类别",

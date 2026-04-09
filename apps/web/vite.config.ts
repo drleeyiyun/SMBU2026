@@ -12,6 +12,7 @@ const API_PREFIXES = [
   "/plans",
   "/archive",
   "/orgs",
+  "/directory",
   "/tasks",
   "/notifications",
   "/league",

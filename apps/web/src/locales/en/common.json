@@ -62,6 +62,54 @@
     "empty": "No plans yet",
     "loadError": "Could not load plans"
   },
+  "oa": {
+    "tabs": {
+      "mine": "My tasks",
+      "league": "League view"
+    },
+    "loading": "Loading…",
+    "empty": "No tasks.",
+    "error": "Could not load",
+    "filters": {
+      "org": "Organization",
+      "orgAll": "All",
+      "status": "Status",
+      "statusAll": "All",
+      "kind": "Kind",
+      "kindAll": "All",
+      "query": "Title contains",
+      "from": "Created from",
+      "to": "Created to",
+      "apply": "Apply filters"
+    },
+    "stats": {
+      "byStatus": "By assignment status",
+      "byKind": "By task kind"
+    },
+    "status": {
+      "unread": "Unread",
+      "read": "Read",
+      "in_progress": "In progress",
+      "done": "Done"
+    },
+    "taskKind": {
+      "single": "Single dept.",
+      "cross": "Cross-dept.",
+      "transfer": "Transfer"
+    },
+    "primaryOrg": "Host org",
+    "involved": "Involved orgs",
+    "expand": "Details & flow",
+    "collapse": "Collapse",
+    "timeline": "Flow log",
+    "timelineEmpty": "No entries yet.",
+    "timelineStatus": "Status",
+    "timelineHandoff": "Handoff",
+    "advanceStatus": "Advance status",
+    "doneStatus": "Already completed",
+    "liveSse": "Live (SSE)",
+    "livePoll": "Polling (10s)"
+  },
   "leagueCoordination": {
     "title": "League coordination",
     "category": "Category",
