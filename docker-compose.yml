@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -21,6 +21,8 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
     env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/campus
@@ -34,6 +36,9 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.27-alpine}
     depends_on:
       - api
     ports:

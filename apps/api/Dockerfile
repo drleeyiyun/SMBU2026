@@ -1,5 +1,7 @@
 # No `# syntax=docker/dockerfile:1` — avoids BuildKit pulling that image from Docker Hub (often blocked or slow on some networks).
-FROM node:22-alpine AS deps
+# Override base when docker.io is unreachable: build-arg NODE_IMAGE (see docker-compose.yml / .env.example).
+ARG NODE_IMAGE=node:22-alpine
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
@@ -16,7 +18,8 @@ COPY packages/db ./packages/db
 
 RUN pnpm --filter api build
 
-FROM node:22-alpine AS runner
+ARG NODE_IMAGE=node:22-alpine
+FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 

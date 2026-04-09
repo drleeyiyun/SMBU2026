@@ -1,5 +1,7 @@
 # No `# syntax=docker/dockerfile:1` — avoids BuildKit pulling that image from Docker Hub (often blocked or slow on some networks).
-FROM node:22-alpine AS build
+# Override bases when docker.io is unreachable: NODE_IMAGE / NGINX_IMAGE (see docker-compose.yml / .env.example).
+ARG NODE_IMAGE=node:22-alpine
+FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
@@ -14,7 +16,8 @@ COPY apps/web ./apps/web
 ENV VITE_API_URL=
 RUN pnpm --filter web build
 
-FROM nginx:1.27-alpine
+ARG NGINX_IMAGE=nginx:1.27-alpine
+FROM ${NGINX_IMAGE}
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
