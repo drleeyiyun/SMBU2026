@@ -92,7 +92,8 @@ corepack prepare pnpm@9.15.0 --activate
 
 ### API 无法连接数据库
 
-Compose 环境下请确保 `DATABASE_URL` 使用主机名 **`db`**（见 `.env.example`），不要使用 `localhost`（在容器内 `localhost` 指向容器自身）。
+- **容器内 `api`：** `docker-compose.yml` 已为 `api` 写入 `DATABASE_URL=...@db:5432`，与根目录 `.env` 无关。
+- **宿主机 `pnpm db:migrate`：** 根目录 `.env` 的 `DATABASE_URL` 须指向 **映射端口**，默认 **`127.0.0.1:15432`**（与 `DB_PUBLISH_PORT` 一致），不要用 `localhost:5432`（宿主机 5432 通常无库或未映射）。
 
 ### CORS 或 Cookie
 
