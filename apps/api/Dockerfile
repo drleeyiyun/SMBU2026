@@ -18,7 +18,6 @@ COPY packages/db ./packages/db
 
 RUN pnpm --filter api build
 
-ARG NODE_IMAGE=node:22-alpine
 FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
