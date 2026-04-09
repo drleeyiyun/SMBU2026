@@ -9,11 +9,18 @@ import {
 } from "react";
 import { apiFetch, readErrorMessage, readJson } from "../lib/api";
 
+export type MeMembership = {
+  orgId: string;
+  title: string | null;
+  nameShort: string;
+};
+
 export type MeUser = {
   id: string;
   email: string;
   displayName: string | null;
   roles: string[];
+  memberships?: MeMembership[];
 };
 
 type SessionState = {

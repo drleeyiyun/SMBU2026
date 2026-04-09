@@ -125,6 +125,11 @@ async function hasPendingRevisionForOrg(orgId: string): Promise<boolean> {
   return !!row;
 }
 
+async function canViewOrgDetails(userId: string, orgId: string): Promise<boolean> {
+  if (await isLeagueAdmin(userId)) return true;
+  return userInOrg(userId, orgId);
+}
+
 async function canManageOrgRoster(userId: string, orgId: string): Promise<boolean> {
   if (await isLeagueAdmin(userId)) return true;
   const inOrg = await userInOrg(userId, orgId);
@@ -241,6 +246,21 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
       .orderBy(asc(organizations.nameShort));
 
     return c.json({ organizations: rows.map(orgToJson) });
+  })
+  .get("/:orgId", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    if (!isUuid(orgId)) {
+      return c.json({ error: "Invalid org id" }, 400);
+    }
+    const userId = c.get("userId")!;
+    if (!(await canViewOrgDetails(userId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+    return c.json({ organization: orgToJson(org) });
   })
   .patch("/:orgId", requireUser, async (c) => {
     const orgId = c.req.param("orgId");

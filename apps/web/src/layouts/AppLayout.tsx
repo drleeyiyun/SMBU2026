@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Outlet } from "react-router-dom";
-import { apiFetch, readJson } from "../lib/api";
+import { useSession } from "../state/session";
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   [
@@ -13,22 +12,14 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function AppLayout() {
   const { t, i18n } = useTranslation("common");
-  const [showLeagueCoordination, setShowLeagueCoordination] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const res = await apiFetch("/me");
-      if (cancelled || !res.ok) return;
-      const me = await readJson<{ roles: string[] }>(res);
-      if (!cancelled) {
-        setShowLeagueCoordination(me.roles.includes("league_admin"));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { user } = useSession();
+  const showLeagueCoordination = user?.roles.includes("league_admin") ?? false;
+  const showOrgManage =
+    showLeagueCoordination ||
+    !!(
+      (user?.roles.includes("org_president") || user?.roles.includes("org_officer")) &&
+      (user?.memberships?.length ?? 0) > 0
+    );
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,6 +38,11 @@ export default function AppLayout() {
             {showLeagueCoordination ? (
               <NavLink to="/app/league/coordination" className={linkClass}>
                 {t("nav.leagueCoordination")}
+              </NavLink>
+            ) : null}
+            {showOrgManage ? (
+              <NavLink to="/app/league/orgs" className={linkClass}>
+                {t("nav.orgManage")}
               </NavLink>
             ) : null}
             <NavLink to="/app/oa" className={linkClass}>

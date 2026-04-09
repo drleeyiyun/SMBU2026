@@ -1,10 +1,10 @@
-import { eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import { z } from "zod";
+import { asc, eq } from "drizzle-orm";
 import { db } from "db";
-import { userRoles, users } from "db/schema";
+import { orgMemberships, organizations, userRoles, users } from "db/schema";
 import { signSession, verifyPassword } from "../lib/auth.js";
 import { SESSION_COOKIE } from "../lib/cookies.js";
 import { loadEnv } from "../env.js";
@@ -95,10 +95,26 @@ export async function me(c: Context<{ Variables: AuthVariables }>) {
     .from(userRoles)
     .where(eq(userRoles.userId, userId));
 
+  const membershipRows = await db
+    .select({
+      orgId: orgMemberships.orgId,
+      title: orgMemberships.title,
+      nameShort: organizations.nameShort,
+    })
+    .from(orgMemberships)
+    .innerJoin(organizations, eq(organizations.id, orgMemberships.orgId))
+    .where(eq(orgMemberships.userId, userId))
+    .orderBy(asc(organizations.nameShort));
+
   return c.json({
     id: user.id,
     email: user.email,
     displayName: user.displayName,
     roles: roleRows.map((r) => r.role),
+    memberships: membershipRows.map((m) => ({
+      orgId: m.orgId,
+      title: m.title,
+      nameShort: m.nameShort,
+    })),
   });
 }

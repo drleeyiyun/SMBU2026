@@ -336,10 +336,10 @@ git commit -m "feat(web): OA page i18n, league filters, org_task SSE refresh"
 - Create: `apps/web/src/pages/OrgManagePage.tsx`（或内嵌 OA）
 - Modify: `apps/web/src/App.tsx`、`AppLayout.tsx`
 
-- [ ] **Step 1: 团委「组织」子页**：列表 `GET /league/orgs`；修订队列 `GET /league/org-revisions` 链到审批（跳转团委已有流程或使用 `POST /orgs/revisions/:id/decide` 简易弹窗）；生命周期 `PATCH /league/orgs/:id/lifecycle`。  
+- [x] **Step 1: 团委「组织」子页**：列表 `GET /league/orgs`；修订队列 `GET /league/org-revisions` 链到审批（跳转团委已有流程或使用 `POST /orgs/revisions/:id/decide` 简易弹窗）；生命周期 `PATCH /league/orgs/:id/lifecycle`。  
   **团长侧**：`PATCH /orgs/:id` 提交修订；`PATCH advisor`、成员编辑 — 若工期不足，本 Task 可标为 **阶段 2**，但在 spec 中已列 API，建议在 **Task 11** 后与用户确认是否本迭代必须。
 
-- [ ] **Step 2: Commit**（若实现）
+- [x] **Step 2: Commit**（若实现）
 
 ```bash
 git add apps/web/src/pages/OrgManagePage.tsx apps/web/src/App.tsx apps/web/src/layouts/AppLayout.tsx

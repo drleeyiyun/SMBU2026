@@ -3,6 +3,7 @@ import AppLayout from "./layouts/AppLayout";
 import ArchivePage from "./pages/ArchivePage";
 import LoginPage from "./pages/LoginPage";
 import LeagueCoordinationPage from "./pages/LeagueCoordinationPage";
+import OrgManagePage from "./pages/OrgManagePage";
 import NotificationsPage from "./pages/NotificationsPage";
 import OaPage from "./pages/OaPage";
 import PlansPage from "./pages/PlansPage";
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="timeline" element={<TimelinePage />} />
         <Route path="plans" element={<PlansPage />} />
         <Route path="league/coordination" element={<LeagueCoordinationPage />} />
+        <Route path="league/orgs" element={<OrgManagePage />} />
         <Route path="oa" element={<OaPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
       </Route>
