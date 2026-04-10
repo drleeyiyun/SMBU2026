@@ -187,7 +187,19 @@
     "studentNo": "Номер студента",
     "saveBasic": "Отправить на проверку",
     "basicAudit": "Статус проверки основных данных",
-    "phoneDraftLegacy": "Черновик телефона (старый)",
+    "identityRequiredHint": "Заполните все поля с * перед сохранением.",
+    "identityLabels": {
+      "nationality": "Национальность",
+      "idNumber": "Номер документа",
+      "grade": "Курс / год",
+      "department": "Факультет",
+      "major": "Специальность",
+      "className": "Группа",
+      "idPhotoUrl": "URL фото документа",
+      "portraitUrl": "URL портрета",
+      "volunteerNumber": "Волонтёрский номер"
+    },
+    "awardSubmittedPending": "Отправлено. Ожидает проверки комсомольской организации.",
     "volunteer": "Волонтёрские часы",
     "totalHours": "Всего часов",
     "claimTitle": "Заявить мероприятие",
@@ -251,7 +263,10 @@
     "loc_en": "EN",
     "loc_ru": "RU",
     "diffField": "Поле",
-    "diffLocale": "Язык"
+    "diffLocale": "Язык",
+    "pendingAwards": "Награды на проверке",
+    "noPendingAwards": "Нет наград в ожидании",
+    "awardRejectReason": "Укажите причину отклонения награды"
   },
   "notifications": {
     "title": "Уведомления",

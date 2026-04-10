@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiBase, apiFetch, readErrorMessage, readJson } from "../lib/api";
+import { formatDisplayDateTime } from "../lib/format-date";
 
 type AbilityCategory = "technical" | "planning" | "management" | "sports";
 
@@ -22,10 +23,6 @@ type ProfileOut = {
   wechat: string | null;
   github: string | null;
   weibo: string | null;
-  profileDraftPhone: string | null;
-  profileDraftWechat: string | null;
-  profileAuditStatus: string;
-  profileAuditReason: string | null;
   basicI18nPublished: Record<string, LocaleTri>;
   basicI18nDraft: Record<string, LocaleTri> | null;
   basicAuditStatus: string;
@@ -66,6 +63,19 @@ const BASIC_FIELDS = ["name", "phone", "wechat", "email", "github", "weibo"] as 
 type BasicField = (typeof BASIC_FIELDS)[number];
 
 const LANGS = ["zh", "en", "ru"] as const;
+
+const IDENTITY_FIELDS = [
+  "nationality",
+  "idNumber",
+  "grade",
+  "department",
+  "major",
+  "className",
+  "idPhotoUrl",
+  "portraitUrl",
+  "volunteerNumber",
+] as const;
+type IdentityField = (typeof IDENTITY_FIELDS)[number];
 
 function emptyBasicForm(): Record<BasicField, { zh: string; en: string; ru: string }> {
   const o = {} as Record<BasicField, { zh: string; en: string; ru: string }>;
@@ -110,9 +120,9 @@ export default function ArchivePage() {
     className: "",
     idPhotoUrl: "",
     portraitUrl: "",
+    volunteerNumber: "",
   });
-  const [draftPhone, setDraftPhone] = useState("");
-  const [legacyPatching, setLegacyPatching] = useState(false);
+  const [identityErrors, setIdentityErrors] = useState<Set<IdentityField>>(() => new Set());
   const [claimEventId, setClaimEventId] = useState("");
   const [claimHours, setClaimHours] = useState("");
   const [tagLabel, setTagLabel] = useState<Record<AbilityCategory, string>>({
@@ -151,8 +161,9 @@ export default function ArchivePage() {
       className: body.profile.className,
       idPhotoUrl: body.profile.idPhotoUrl ?? "",
       portraitUrl: body.profile.portraitUrl ?? "",
+      volunteerNumber: body.profile.volunteerNumber ?? "",
     });
-    setDraftPhone(body.profile.profileDraftPhone ?? body.profile.phone ?? "");
+    setIdentityErrors(new Set());
   }, []);
 
   useEffect(() => {
@@ -184,7 +195,7 @@ export default function ArchivePage() {
         const row = JSON.parse((ev as MessageEvent).data as string) as { payload?: unknown };
         const pl = row.payload as { scope?: string } | undefined;
         const s = pl?.scope;
-        if (s === "profile_basic" || s === "profile" || s === "award") {
+        if (s === "profile_basic" || s === "award") {
           scheduleReload();
         }
       } catch {
@@ -249,6 +260,13 @@ export default function ArchivePage() {
 
   async function saveIdentity() {
     setMsg(null);
+    const missing = IDENTITY_FIELDS.filter((k) => !String(identity[k] ?? "").trim());
+    if (missing.length > 0) {
+      setIdentityErrors(new Set(missing));
+      setMsg(t("archive.identityRequiredHint"));
+      return;
+    }
+    setIdentityErrors(new Set());
     const res = await apiFetch("/archive/me", {
       method: "PATCH",
       body: JSON.stringify({
@@ -260,6 +278,7 @@ export default function ArchivePage() {
         className: identity.className || null,
         idPhotoUrl: identity.idPhotoUrl || null,
         portraitUrl: identity.portraitUrl || null,
+        volunteerNumber: identity.volunteerNumber.trim() || null,
       }),
     });
     if (!res.ok) {
@@ -270,22 +289,14 @@ export default function ArchivePage() {
     await load();
   }
 
-  async function saveLegacyPhone() {
-    setLegacyPatching(true);
-    setMsg(null);
-    try {
-      const res = await apiFetch("/archive/me", {
-        method: "PATCH",
-        body: JSON.stringify({ profileDraftPhone: draftPhone || null }),
-      });
-      if (!res.ok) {
-        setMsg(await readErrorMessage(res));
-        return;
-      }
-      await load();
-    } finally {
-      setLegacyPatching(false);
-    }
+  function patchIdentity<K extends IdentityField>(key: K, value: string) {
+    setIdentity((prev) => ({ ...prev, [key]: value }));
+    setIdentityErrors((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
   }
 
   async function submitClaim() {
@@ -357,6 +368,7 @@ export default function ArchivePage() {
     }
     setAwardTitle("");
     setAwardProof("");
+    setMsg(t("archive.awardSubmittedPending"));
     await load();
   }
 
@@ -391,7 +403,15 @@ export default function ArchivePage() {
       </div>
 
       {msg ? (
-        <p className="rounded-md border border-border bg-muted/50 px-3 py-2 text-sm">{msg}</p>
+        <p
+          className={
+            identityErrors.size > 0
+              ? "rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              : "rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
+          }
+        >
+          {msg}
+        </p>
       ) : null}
 
       <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
@@ -456,27 +476,31 @@ export default function ArchivePage() {
           {data.identityComplete ? t("archive.identityComplete") : t("archive.identityIncomplete")}
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          {(
-            [
-              ["nationality", identity.nationality],
-              ["idNumber", identity.idNumber],
-              ["grade", identity.grade],
-              ["department", identity.department],
-              ["major", identity.major],
-              ["className", identity.className],
-              ["idPhotoUrl", identity.idPhotoUrl],
-              ["portraitUrl", identity.portraitUrl],
-            ] as const
-          ).map(([key, val]) => (
-            <label key={key} className="flex flex-col gap-1 text-sm">
-              {key}
-              <input
-                className={inputClass}
-                value={val}
-                onChange={(e) => setIdentity((prev) => ({ ...prev, [key]: e.target.value }))}
-              />
-            </label>
-          ))}
+          {IDENTITY_FIELDS.map((key) => {
+            const val = identity[key];
+            const err = identityErrors.has(key);
+            return (
+              <label key={key} className="flex flex-col gap-1 text-sm">
+                <span>
+                  {t(`archive.identityLabels.${key}` as "archive.identityLabels.nationality")}
+                  <span className="text-destructive" aria-hidden>
+                    {" "}
+                    *
+                  </span>
+                </span>
+                <input
+                  className={
+                    err
+                      ? `${inputClass} border-destructive ring-1 ring-destructive/30`
+                      : inputClass
+                  }
+                  value={val}
+                  onChange={(e) => patchIdentity(key, e.target.value)}
+                  aria-invalid={err}
+                />
+              </label>
+            );
+          })}
         </div>
         <button
           type="button"
@@ -495,8 +519,8 @@ export default function ArchivePage() {
           {data.volunteerSummary.records.map((r) => (
             <li key={r.id} className="flex justify-between gap-2 border-b border-border py-1">
               <span>{r.title}</span>
-              <span className="text-muted-foreground">
-                {r.hours}h · {r.source}
+                <span className="text-muted-foreground">
+                {r.hours}h · {r.source} · {formatDisplayDateTime(r.occurredAt)}
               </span>
             </li>
           ))}
@@ -601,6 +625,10 @@ export default function ArchivePage() {
             <li key={a.id} className="py-2 text-sm">
               <span className="font-medium">{a.title}</span>
               <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs">{a.status}</span>
+              <span className="ml-2 text-xs text-muted-foreground">
+                {formatDisplayDateTime(a.createdAt)}
+                {a.decidedAt ? ` · ${formatDisplayDateTime(a.decidedAt)}` : ""}
+              </span>
               {a.reason ? <p className="text-xs text-red-600">{a.reason}</p> : null}
             </li>
           ))}
@@ -628,27 +656,6 @@ export default function ArchivePage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h2 className="mb-2 text-lg font-semibold">{t("archive.phoneDraftLegacy")}</h2>
-        <div className="flex flex-wrap gap-2">
-          <input
-            className={`${inputClass} max-w-xs flex-1`}
-            value={draftPhone}
-            onChange={(e) => setDraftPhone(e.target.value)}
-          />
-          <button
-            type="button"
-            disabled={legacyPatching}
-            onClick={() => void saveLegacyPhone()}
-            className="rounded-md bg-secondary px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            {t("plans.save")}
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t("archive.status")} (legacy): {data.profile.profileAuditStatus}
-        </p>
-      </section>
     </div>
   );
 }

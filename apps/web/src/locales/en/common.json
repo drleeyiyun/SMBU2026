@@ -187,7 +187,19 @@
     "studentNo": "Student No.",
     "saveBasic": "Submit basic info for review",
     "basicAudit": "Basic info review status",
-    "phoneDraftLegacy": "Legacy phone draft (review)",
+    "identityRequiredHint": "Fill in every field marked with * before saving.",
+    "identityLabels": {
+      "nationality": "Nationality / ethnicity",
+      "idNumber": "ID number",
+      "grade": "Grade",
+      "department": "Department",
+      "major": "Major",
+      "className": "Class",
+      "idPhotoUrl": "ID photo URL",
+      "portraitUrl": "Portrait photo URL",
+      "volunteerNumber": "Volunteer ID"
+    },
+    "awardSubmittedPending": "Submitted. Pending league review.",
     "volunteer": "Volunteer hours",
     "totalHours": "Total hours",
     "claimTitle": "Claim volunteer activity",
@@ -251,7 +263,10 @@
     "loc_en": "EN",
     "loc_ru": "RU",
     "diffField": "Field",
-    "diffLocale": "Locale"
+    "diffLocale": "Locale",
+    "pendingAwards": "Honors pending review",
+    "noPendingAwards": "No honors pending",
+    "awardRejectReason": "Reason is required to reject an honor"
   },
   "notifications": {
     "title": "Notifications",

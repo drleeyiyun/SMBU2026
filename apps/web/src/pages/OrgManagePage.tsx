@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch, readErrorMessage, readJson } from "../lib/api";
+import { formatDisplayDateTime } from "../lib/format-date";
 import { useSession } from "../state/session";
 
 type OrgJson = {
@@ -390,7 +391,7 @@ export default function OrgManagePage() {
                     <dt className="text-muted-foreground">{t("orgManage.lifecycleLabel")}</dt>
                     <dd className="font-medium">{t(`orgManage.lifecycle.${o.lifecycleStatus}`)}</dd>
                     <dt className="text-muted-foreground">{t("orgManage.createdAtLabel")}</dt>
-                    <dd className="font-medium">{new Date(o.createdAt).toLocaleString()}</dd>
+                    <dd className="font-medium">{formatDisplayDateTime(o.createdAt)}</dd>
                     <dt className="text-muted-foreground">{t("orgManage.advisorIdLabel")}</dt>
                     <dd className="truncate font-mono text-[11px]" title={o.advisorUserId ?? ""}>
                       {o.advisorUserId ? `${o.advisorUserId.slice(0, 8)}…` : "—"}
@@ -449,7 +450,7 @@ export default function OrgManagePage() {
               {revisions.map((r) => (
                 <li key={r.id} className="rounded-md border border-border p-3">
                   <div className="font-medium">
-                    {r.orgNameShort} · {r.createdAt}
+                    {r.orgNameShort} · {formatDisplayDateTime(r.createdAt)}
                   </div>
                   <pre className="mt-2 max-h-28 overflow-auto rounded bg-muted/50 p-2 text-xs">
                     {JSON.stringify(r.payload, null, 2)}
@@ -649,7 +650,7 @@ export default function OrgManagePage() {
                   <ul className="space-y-1 text-xs text-muted-foreground">
                     {events.map((ev) => (
                       <li key={ev.id} className="rounded bg-muted/40 px-2 py-1">
-                        {ev.changeKind} · {ev.createdAt}
+                        {ev.changeKind} · {formatDisplayDateTime(ev.createdAt)}
                       </li>
                     ))}
                   </ul>

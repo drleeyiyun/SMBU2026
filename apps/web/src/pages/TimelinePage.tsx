@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { apiBase, apiFetch, readErrorMessage, readJson } from "../lib/api";
+import { formatDisplayDateTime } from "../lib/format-date";
 
 const STALE_MS = 48 * 3600 * 1000;
 
@@ -515,7 +516,7 @@ export default function TimelinePage() {
           <span className="font-medium">{item.title}</span>
         </div>
         <div className="text-xs text-muted-foreground">
-          {item.startsAt} → {item.endsAt}
+          {formatDisplayDateTime(item.startsAt)} → {formatDisplayDateTime(item.endsAt)}
         </div>
         {loc != null && loc.length > 0 ? (
           <div className="text-xs text-muted-foreground">{loc}</div>

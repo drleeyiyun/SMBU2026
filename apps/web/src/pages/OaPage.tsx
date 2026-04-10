@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiBase, apiFetch, readErrorMessage, readJson } from "../lib/api";
+import { formatDisplayDateTime } from "../lib/format-date";
 import { useSession } from "../state/session";
 
 type TaskRow = {
@@ -471,7 +472,7 @@ function TaskList(props: {
                 {t("oa.primaryOrg")}: {row.primaryOrgNameShort}
               </span>
             ) : null}
-            {row.task.startsAt ? ` · ${row.task.startsAt}` : null}
+            {row.task.startsAt ? ` · ${formatDisplayDateTime(row.task.startsAt)}` : null}
           </div>
           {row.involvedOrgIds.length > 0 ? (
             <div className="mt-1 text-xs text-muted-foreground">
@@ -517,12 +518,13 @@ function TaskList(props: {
                           <>
                             <span className="font-medium">{t("oa.timelineStatus")}</span>:{" "}
                             {ev.fromStatus ? `${statusLabel(ev.fromStatus)} → ` : ""}
-                            {statusLabel(ev.toStatus)} · {ev.at}
+                            {statusLabel(ev.toStatus)} · {formatDisplayDateTime(ev.at)}
                           </>
                         ) : (
                           <>
                             <span className="font-medium">{t("oa.timelineHandoff")}</span>:{" "}
-                            {ev.fromUserId ?? "—"} → {ev.toUserId ?? "—"} · {ev.at}
+                            {ev.fromUserId ?? "—"} → {ev.toUserId ?? "—"} ·{" "}
+                            {formatDisplayDateTime(ev.at)}
                             {ev.note ? ` · ${ev.note}` : ""}
                           </>
                         )}

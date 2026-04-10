@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { apiFetch, readErrorMessage, readJson } from "../lib/api";
+import { formatDisplayDateTime } from "../lib/format-date";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -341,8 +342,8 @@ export default function LeagueCoordinationPage() {
                     )}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {t("leagueCoordination.startsAt")}: {new Date(row.startsAt).toLocaleString()} —{" "}
-                    {t("leagueCoordination.endsAt")}: {new Date(row.endsAt).toLocaleString()}
+                    {t("leagueCoordination.startsAt")}: {formatDisplayDateTime(row.startsAt)} —{" "}
+                    {t("leagueCoordination.endsAt")}: {formatDisplayDateTime(row.endsAt)}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">

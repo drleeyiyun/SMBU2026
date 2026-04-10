@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "db";
-import { notifications, studentProfiles, users } from "db/schema";
+import { awards, notifications, studentProfiles, users } from "db/schema";
 import { parseBasicI18n } from "../lib/archive-profile-format.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
@@ -91,22 +91,12 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
         major: studentProfiles.major,
         grade: studentProfiles.grade,
         basicAuditStatus: studentProfiles.basicAuditStatus,
-        profileAuditStatus: studentProfiles.profileAuditStatus,
         basicI18nPublished: studentProfiles.basicI18nPublished,
         basicI18nDraft: studentProfiles.basicI18nDraft,
-        phone: studentProfiles.phone,
-        wechat: studentProfiles.wechat,
-        profileDraftPhone: studentProfiles.profileDraftPhone,
-        profileDraftWechat: studentProfiles.profileDraftWechat,
       })
       .from(studentProfiles)
       .innerJoin(users, eq(studentProfiles.userId, users.id))
-      .where(
-        or(
-          eq(studentProfiles.basicAuditStatus, "pending"),
-          eq(studentProfiles.profileAuditStatus, "pending"),
-        ),
-      )
+      .where(eq(studentProfiles.basicAuditStatus, "pending"))
       .orderBy(asc(users.displayName));
 
     return c.json({
@@ -119,14 +109,38 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
         major: r.major,
         grade: r.grade,
         basicAuditStatus: r.basicAuditStatus,
-        profileAuditStatus: r.profileAuditStatus,
         basicI18nPublished: parseBasicI18n(r.basicI18nPublished),
         basicI18nDraft:
           r.basicI18nDraft === null ? null : parseBasicI18n(r.basicI18nDraft),
-        phone: r.phone,
-        wechat: r.wechat,
-        profileDraftPhone: r.profileDraftPhone,
-        profileDraftWechat: r.profileDraftWechat,
+      })),
+    });
+  })
+  .get("/awards/pending", requireUser, requireRoles("league_admin"), async (c) => {
+    const rows = await db
+      .select({
+        id: awards.id,
+        userId: awards.userId,
+        title: awards.title,
+        proofUrl: awards.proofUrl,
+        createdAt: awards.createdAt,
+        displayName: users.displayName,
+        studentNo: studentProfiles.studentNo,
+      })
+      .from(awards)
+      .innerJoin(users, eq(awards.userId, users.id))
+      .innerJoin(studentProfiles, eq(studentProfiles.userId, awards.userId))
+      .where(eq(awards.status, "pending"))
+      .orderBy(desc(awards.createdAt));
+
+    return c.json({
+      items: rows.map((r) => ({
+        id: r.id,
+        userId: r.userId,
+        title: r.title,
+        proofUrl: r.proofUrl,
+        createdAt: r.createdAt.toISOString(),
+        studentDisplayName: r.displayName,
+        studentNo: r.studentNo,
       })),
     });
   })

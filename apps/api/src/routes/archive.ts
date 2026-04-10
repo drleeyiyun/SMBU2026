@@ -63,12 +63,11 @@ const basicI18nSchema = z
 
 const patchMeSchema = z
   .object({
-    profileDraftPhone: z.union([z.string(), z.null()]).optional(),
-    profileDraftWechat: z.union([z.string(), z.null()]).optional(),
     github: z.union([z.string(), z.null()]).optional(),
     weibo: z.union([z.string(), z.null()]).optional(),
     basicI18nDraft: basicI18nSchema.optional(),
     studentNo: z.union([z.string().min(1), z.null()]).optional(),
+    volunteerNumber: z.union([z.string().min(1), z.null()]).optional(),
     nationality: z.union([z.string(), z.null()]).optional(),
     idNumber: z.union([z.string(), z.null()]).optional(),
     grade: z.union([z.string(), z.null()]).optional(),
@@ -154,18 +153,8 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: "No fields to update" }, 400);
     }
 
-    const profileDraftTouched =
-      Object.prototype.hasOwnProperty.call(data, "profileDraftPhone") ||
-      Object.prototype.hasOwnProperty.call(data, "profileDraftWechat");
-
     const updates: Record<string, unknown> = {};
 
-    if (data.profileDraftPhone !== undefined) {
-      updates.profileDraftPhone = data.profileDraftPhone;
-    }
-    if (data.profileDraftWechat !== undefined) {
-      updates.profileDraftWechat = data.profileDraftWechat;
-    }
     if (data.github !== undefined) {
       updates.github = data.github;
     }
@@ -174,6 +163,9 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     }
     if (data.studentNo !== undefined) {
       updates.studentNo = data.studentNo;
+    }
+    if (data.volunteerNumber !== undefined) {
+      updates.volunteerNumber = data.volunteerNumber;
     }
     if (data.nationality !== undefined) {
       updates.nationality = data.nationality;
@@ -213,11 +205,6 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       updates.basicI18nDraft = draftObj;
       updates.basicAuditStatus = "pending";
       updates.basicAuditReason = null;
-    }
-
-    if (profileDraftTouched) {
-      updates.profileAuditStatus = "pending";
-      updates.profileAuditReason = null;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -354,9 +341,8 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     }
 
     const basicPending = profile.basicAuditStatus === "pending";
-    const legacyPending = profile.profileAuditStatus === "pending";
 
-    if (!basicPending && !legacyPending) {
+    if (!basicPending) {
       return c.json({ error: "No pending profile change to review" }, 409);
     }
 
@@ -365,118 +351,53 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     const notificationsOut: (typeof notifications.$inferSelect)[] = [];
 
     await db.transaction(async (tx) => {
-      if (basicPending) {
-        if (action === "approve") {
-          const draftParsed =
-            profile.basicI18nDraft === null
-              ? parseBasicI18n(profile.basicI18nPublished)
-              : parseBasicI18n(profile.basicI18nDraft);
-          const draftObj: Record<string, { zh?: string; en?: string; ru?: string }> = {};
-          for (const k of BASIC_KEYS) {
-            const t = draftParsed[k];
-            if (t) draftObj[k] = t;
-          }
-          const { phone: pubPhone, wechat: pubWechat } = triPhoneEmailFromBasic(draftParsed);
-          await tx
-            .update(studentProfiles)
-            .set({
-              basicI18nPublished: draftObj,
-              basicI18nDraft: null,
-              basicAuditStatus: "approved",
-              basicAuditReason: null,
-              phone: pubPhone ?? profile.phone,
-              wechat: pubWechat ?? profile.wechat,
-            })
-            .where(eq(studentProfiles.userId, targetUserId));
-        } else {
-          await tx
-            .update(studentProfiles)
-            .set({
-              basicAuditStatus: "rejected",
-              basicAuditReason: reason!.trim(),
-            })
-            .where(eq(studentProfiles.userId, targetUserId));
+      if (action === "approve") {
+        const draftParsed =
+          profile.basicI18nDraft === null
+            ? parseBasicI18n(profile.basicI18nPublished)
+            : parseBasicI18n(profile.basicI18nDraft);
+        const draftObj: Record<string, { zh?: string; en?: string; ru?: string }> = {};
+        for (const k of BASIC_KEYS) {
+          const t = draftParsed[k];
+          if (t) draftObj[k] = t;
         }
-
-        const [row] = await tx
-          .insert(notifications)
-          .values({
-            userId: targetUserId,
-            type: "archive_audit",
-            payloadJson: JSON.stringify({
-              scope: "profile_basic",
-              action,
-              reason: action === "reject" ? reason!.trim() : null,
-              reviewerUserId: reviewerId,
-              decidedAt: decidedAt.toISOString(),
-            }),
+        const { phone: pubPhone, wechat: pubWechat } = triPhoneEmailFromBasic(draftParsed);
+        await tx
+          .update(studentProfiles)
+          .set({
+            basicI18nPublished: draftObj,
+            basicI18nDraft: null,
+            basicAuditStatus: "approved",
+            basicAuditReason: null,
+            phone: pubPhone ?? profile.phone,
+            wechat: pubWechat ?? profile.wechat,
           })
-          .returning();
-        if (row) notificationsOut.push(row);
+          .where(eq(studentProfiles.userId, targetUserId));
+      } else {
+        await tx
+          .update(studentProfiles)
+          .set({
+            basicAuditStatus: "rejected",
+            basicAuditReason: reason!.trim(),
+          })
+          .where(eq(studentProfiles.userId, targetUserId));
       }
 
-      if (legacyPending && (action === "approve" || !basicPending)) {
-        if (action === "reject" && basicPending) {
-          /* basic rejection already applied; legacy still pending */
-        } else if (action === "approve") {
-          const nextPhone =
-            profile.profileDraftPhone !== null ? profile.profileDraftPhone : profile.phone;
-          const nextWechat =
-            profile.profileDraftWechat !== null ? profile.profileDraftWechat : profile.wechat;
-
-          await tx
-            .update(studentProfiles)
-            .set({
-              phone: nextPhone,
-              wechat: nextWechat,
-              profileDraftPhone: null,
-              profileDraftWechat: null,
-              profileAuditStatus: "approved",
-              profileAuditReason: null,
-            })
-            .where(eq(studentProfiles.userId, targetUserId));
-
-          const [row] = await tx
-            .insert(notifications)
-            .values({
-              userId: targetUserId,
-              type: "archive_audit",
-              payloadJson: JSON.stringify({
-                scope: "profile",
-                action: "approve",
-                reason: null,
-                reviewerUserId: reviewerId,
-                decidedAt: decidedAt.toISOString(),
-              }),
-            })
-            .returning();
-          if (row) notificationsOut.push(row);
-        } else {
-          await tx
-            .update(studentProfiles)
-            .set({
-              profileAuditStatus: "rejected",
-              profileAuditReason: reason!.trim(),
-            })
-            .where(eq(studentProfiles.userId, targetUserId));
-
-          const [row] = await tx
-            .insert(notifications)
-            .values({
-              userId: targetUserId,
-              type: "archive_audit",
-              payloadJson: JSON.stringify({
-                scope: "profile",
-                action,
-                reason: action === "reject" ? reason!.trim() : null,
-                reviewerUserId: reviewerId,
-                decidedAt: decidedAt.toISOString(),
-              }),
-            })
-            .returning();
-          if (row) notificationsOut.push(row);
-        }
-      }
+      const [row] = await tx
+        .insert(notifications)
+        .values({
+          userId: targetUserId,
+          type: "archive_audit",
+          payloadJson: JSON.stringify({
+            scope: "profile_basic",
+            action,
+            reason: action === "reject" ? reason!.trim() : null,
+            reviewerUserId: reviewerId,
+            decidedAt: decidedAt.toISOString(),
+          }),
+        })
+        .returning();
+      if (row) notificationsOut.push(row);
     });
 
     for (const n of notificationsOut) {

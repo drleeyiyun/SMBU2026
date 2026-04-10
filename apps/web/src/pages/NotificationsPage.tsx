@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { apiBase, apiFetch, readErrorMessage, readJson } from "../lib/api";
+import { formatDisplayDateTime } from "../lib/format-date";
 
 type NotificationRow = {
   id: string;
@@ -53,7 +54,10 @@ function summarizeNotification(
       lines.push({ label: t("notifications.reason"), value: p.reason });
     }
     if (typeof p.decidedAt === "string") {
-      lines.push({ label: t("notifications.decidedAt"), value: p.decidedAt });
+      lines.push({
+        label: t("notifications.decidedAt"),
+        value: formatDisplayDateTime(p.decidedAt),
+      });
     }
     if (typeof p.awardId === "string") {
       lines.push({ label: t("notifications.awardId"), value: p.awardId });
@@ -70,7 +74,10 @@ function summarizeNotification(
       { label: t("notifications.toStatus"), value: String(p.toStatus ?? "—") },
     ];
     if (typeof p.at === "string") {
-      lines.push({ label: t("notifications.decidedAt"), value: p.at });
+      lines.push({
+        label: t("notifications.decidedAt"),
+        value: formatDisplayDateTime(p.at),
+      });
     }
     return {
       title: t("notifications.taskStatusChange"),
@@ -218,7 +225,9 @@ export default function NotificationsPage() {
                           </div>
                         ))}
                     </dl>
-                    <p className="text-xs text-muted-foreground">{n.createdAt}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDisplayDateTime(n.createdAt)}
+                    </p>
                   </div>
                   {!n.readAt ? (
                     <button

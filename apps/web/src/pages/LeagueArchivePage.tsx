@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch, readErrorMessage, readJson } from "../lib/api";
+import { formatDisplayDateTime } from "../lib/format-date";
 import { useSession } from "../state/session";
 
 const BASIC_KEYS = ["name", "phone", "wechat", "email", "github", "weibo"] as const;
@@ -21,13 +22,27 @@ type RosterRow = {
   profileAuditStatus: string;
 };
 
-type PendingRow = RosterRow & {
+type PendingRow = {
+  userId: string;
+  displayName: string | null;
+  email: string;
+  studentNo: string | null;
+  department: string | null;
+  major: string | null;
+  grade: string | null;
+  basicAuditStatus: string;
   basicI18nPublished: BasicI18n;
   basicI18nDraft: BasicI18n | null;
-  phone: string | null;
-  wechat: string | null;
-  profileDraftPhone: string | null;
-  profileDraftWechat: string | null;
+};
+
+type PendingAwardRow = {
+  id: string;
+  userId: string;
+  title: string;
+  proofUrl: string | null;
+  createdAt: string;
+  studentDisplayName: string | null;
+  studentNo: string | null;
 };
 
 type AuditRow = {
@@ -59,7 +74,6 @@ type ArchiveDetail = {
     github: string | null;
     weibo: string | null;
     basicAuditStatus: string;
-    profileAuditStatus: string;
     basicI18nPublished: BasicI18n;
     basicI18nDraft: BasicI18n | null;
   };
@@ -95,6 +109,8 @@ export default function LeagueArchivePage() {
   const [audit, setAudit] = useState<AuditRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reasonByUser, setReasonByUser] = useState<Record<string, string>>({});
+  const [reasonByAward, setReasonByAward] = useState<Record<string, string>>({});
+  const [pendingAwards, setPendingAwards] = useState<PendingAwardRow[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
 
   const [detail, setDetail] = useState<ArchiveDetail | null>(null);
@@ -117,9 +133,10 @@ export default function LeagueArchivePage() {
     setError(null);
     const q = rosterQRef.current.trim();
     const qs = q ? `?q=${encodeURIComponent(q)}` : "";
-    const [rRes, pRes, aRes] = await Promise.all([
+    const [rRes, pRes, awRes, aRes] = await Promise.all([
       apiFetch(`/league/archive/students${qs}`),
       apiFetch("/league/archive/pending"),
+      apiFetch("/league/archive/awards/pending"),
       apiFetch("/league/archive/audit-log?limit=30"),
     ]);
     if (!rRes.ok) {
@@ -130,15 +147,21 @@ export default function LeagueArchivePage() {
       setError(await readErrorMessage(pRes));
       return;
     }
+    if (!awRes.ok) {
+      setError(await readErrorMessage(awRes));
+      return;
+    }
     if (!aRes.ok) {
       setError(await readErrorMessage(aRes));
       return;
     }
     const rBody = await readJson<{ items: RosterRow[] }>(rRes);
     const pBody = await readJson<{ items: PendingRow[] }>(pRes);
+    const awBody = await readJson<{ items: PendingAwardRow[] }>(awRes);
     const aBody = await readJson<{ items: AuditRow[] }>(aRes);
     setRoster(rBody.items);
     setPending(pBody.items);
+    setPendingAwards(awBody.items);
     setAudit(aBody.items);
   }, [allowed]);
 
@@ -192,11 +215,34 @@ export default function LeagueArchivePage() {
     () =>
       ({
         profile_basic: t("leagueArchive.profileBasic"),
-        profile: t("leagueArchive.profileLegacy"),
+        profile: t("notifications.archiveContact"),
         award: t("notifications.archiveAward"),
       }) as Record<string, string>,
     [t],
   );
+
+  async function reviewAward(awardId: string, action: "approve" | "reject") {
+    setMsg(null);
+    const reason = reasonByAward[awardId]?.trim() ?? "";
+    if (action === "reject" && !reason) {
+      setMsg(t("leagueArchive.awardRejectReason"));
+      return;
+    }
+    const res = await apiFetch(`/archive/awards/${awardId}/review`, {
+      method: "POST",
+      body: JSON.stringify({ action, reason: action === "reject" ? reason : undefined }),
+    });
+    if (!res.ok) {
+      setMsg(await readErrorMessage(res));
+      return;
+    }
+    setReasonByAward((prev) => {
+      const next = { ...prev };
+      delete next[awardId];
+      return next;
+    });
+    await load();
+  }
 
   if (!allowed) {
     return (
@@ -259,6 +305,60 @@ export default function LeagueArchivePage() {
         )}
       </section>
 
+      <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-medium">{t("leagueArchive.pendingAwards")}</h2>
+        {pendingAwards.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("leagueArchive.noPendingAwards")}</p>
+        ) : (
+          <ul className="space-y-4">
+            {pendingAwards.map((row) => (
+              <li
+                key={row.id}
+                className="rounded-lg border border-border bg-background p-4 text-sm shadow-sm"
+              >
+                <p className="font-medium">{row.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {row.studentDisplayName ?? row.userId.slice(0, 8)} · {t("archive.studentNo")}:{" "}
+                  {row.studentNo ?? "—"} · {formatDisplayDateTime(row.createdAt)}
+                </p>
+                {row.proofUrl ? (
+                  <p className="mt-1 break-all text-xs">
+                    {t("archive.proofUrl")}:{" "}
+                    <a href={row.proofUrl} className="text-primary underline" target="_blank" rel="noreferrer">
+                      {row.proofUrl}
+                    </a>
+                  </p>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <input
+                    className="min-w-[200px] flex-1 rounded-md border border-border bg-background px-3 py-2"
+                    placeholder={t("leagueArchive.reason")}
+                    value={reasonByAward[row.id] ?? ""}
+                    onChange={(e) =>
+                      setReasonByAward((prev) => ({ ...prev, [row.id]: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void reviewAward(row.id, "approve")}
+                    className="rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground"
+                  >
+                    {t("leagueArchive.approve")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void reviewAward(row.id, "reject")}
+                    className="rounded-md border border-destructive/50 px-3 py-2 font-medium text-destructive"
+                  >
+                    {t("leagueArchive.reject")}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <section>
         <h2 className="mb-3 text-lg font-medium">{t("leagueArchive.pending")}</h2>
         {pending.length === 0 ? (
@@ -267,9 +367,6 @@ export default function LeagueArchivePage() {
           <ul className="space-y-4">
             {pending.map((row) => {
               const rowsBasic = basicDiffRows(row.basicI18nPublished, row.basicI18nDraft);
-              const showLegacy =
-                row.profileAuditStatus === "pending" &&
-                (row.profileDraftPhone !== null || row.profileDraftWechat !== null);
               return (
                 <li
                   key={row.userId}
@@ -291,15 +388,9 @@ export default function LeagueArchivePage() {
                     </button>
                   </div>
 
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {row.basicAuditStatus === "pending" ? t("leagueArchive.profileBasic") : null}
-                    {row.basicAuditStatus === "pending" && row.profileAuditStatus === "pending"
-                      ? " · "
-                      : ""}
-                    {row.profileAuditStatus === "pending" ? t("leagueArchive.profileLegacy") : null}
-                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">{t("leagueArchive.profileBasic")}</p>
 
-                  {row.basicAuditStatus === "pending" && rowsBasic.length > 0 ? (
+                  {rowsBasic.length > 0 ? (
                     <div className="mt-3 rounded-md border border-border bg-muted/20 p-2">
                       <p className="mb-2 text-xs font-medium">{t("leagueArchive.basicDiff")}</p>
                       <div className="overflow-x-auto">
@@ -324,26 +415,6 @@ export default function LeagueArchivePage() {
                           </tbody>
                         </table>
                       </div>
-                    </div>
-                  ) : null}
-
-                  {showLegacy ? (
-                    <div className="mt-3 rounded-md border border-border bg-muted/20 p-2">
-                      <p className="mb-2 text-xs font-medium">{t("leagueArchive.contactDiff")}</p>
-                      <table className="w-full border-collapse text-xs">
-                        <tbody>
-                          <tr className="border-b border-border/60">
-                            <td className="p-1 text-muted-foreground">{t("leagueArchive.phone")}</td>
-                            <td className="p-1">{row.phone ?? "—"}</td>
-                            <td className="p-1 font-medium">{row.profileDraftPhone ?? "—"}</td>
-                          </tr>
-                          <tr>
-                            <td className="p-1 text-muted-foreground">{t("leagueArchive.wechat")}</td>
-                            <td className="p-1">{row.wechat ?? "—"}</td>
-                            <td className="p-1 font-medium">{row.profileDraftWechat ?? "—"}</td>
-                          </tr>
-                        </tbody>
-                      </table>
                     </div>
                   ) : null}
 
@@ -406,7 +477,9 @@ export default function LeagueArchivePage() {
                       : (pl.action ?? "—");
                 return (
                   <tr key={r.id} className="border-b border-border">
-                    <td className="p-2 whitespace-nowrap text-muted-foreground">{r.createdAt}</td>
+                    <td className="p-2 whitespace-nowrap text-muted-foreground">
+                      {formatDisplayDateTime(r.createdAt)}
+                    </td>
                     <td className="p-2">
                       <div className="font-medium">{r.studentDisplayName ?? r.userId.slice(0, 8)}</div>
                       <div className="text-xs text-muted-foreground">{scopeLabel}</div>

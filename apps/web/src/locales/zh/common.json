@@ -187,7 +187,19 @@
     "studentNo": "学号",
     "saveBasic": "提交基础信息审核",
     "basicAudit": "基础信息审核状态",
-    "phoneDraftLegacy": "联系方式草稿（旧版）",
+    "identityRequiredHint": "请填写全部带 * 的身份信息项后再保存。",
+    "identityLabels": {
+      "nationality": "民族",
+      "idNumber": "证件号",
+      "grade": "年级",
+      "department": "院系",
+      "major": "专业",
+      "className": "班级",
+      "idPhotoUrl": "证件照 URL",
+      "portraitUrl": "人像照 URL",
+      "volunteerNumber": "志愿者号"
+    },
+    "awardSubmittedPending": "已提交，等待团委审核。",
     "volunteer": "志愿服务时长",
     "totalHours": "累计时长",
     "claimTitle": "认领统筹志愿活动",
@@ -251,7 +263,10 @@
     "loc_en": "English",
     "loc_ru": "Русский",
     "diffField": "字段",
-    "diffLocale": "语言"
+    "diffLocale": "语言",
+    "pendingAwards": "待审核荣誉",
+    "noPendingAwards": "暂无待审核荣誉",
+    "awardRejectReason": "驳回荣誉时请填写理由"
   },
   "notifications": {
     "title": "通知",

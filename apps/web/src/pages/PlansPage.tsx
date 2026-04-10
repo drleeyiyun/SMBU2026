@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch, readErrorMessage, readJson } from "../lib/api";
+import { formatDisplayDateTime } from "../lib/format-date";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -278,8 +279,8 @@ export default function PlansPage() {
                 <div>
                   <div className="font-medium">{p.title}</div>
                   <div className="text-xs text-muted-foreground">
-                    {t("plans.startsAt")}: {new Date(p.startsAt).toLocaleString()} —{" "}
-                    {t("plans.endsAt")}: {new Date(p.endsAt).toLocaleString()}
+                    {t("plans.startsAt")}: {formatDisplayDateTime(p.startsAt)} —{" "}
+                    {t("plans.endsAt")}: {formatDisplayDateTime(p.endsAt)}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {t("plans.priority")}: {p.priority} · {t("plans.status")}: {p.status} ·{" "}
