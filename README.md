@@ -12,7 +12,7 @@
 ## Quick start with Docker / 使用 Docker 快速启动
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/drleeyiyun/SMBU2026.git
 cd campus-platform
 cp .env.example .env
 docker compose up -d --build
