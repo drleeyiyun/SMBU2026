@@ -18,7 +18,8 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-在浏览器打开：**http://localhost:8080**（若修改了 `.env` 中的 `WEB_PORT`，请改用对应端口）。
+在浏览器打开：http://localhost:8080
+（若修改了 `.env` 中的 `WEB_PORT`，请改用对应端口）。
 
 Compose 服务说明：
 
