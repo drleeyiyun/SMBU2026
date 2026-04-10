@@ -363,16 +363,40 @@ export default function OrgManagePage() {
           {leagueOrgs.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("orgManage.noOrgs")}</p>
           ) : (
-            <ul className="divide-y divide-border text-sm">
+            <div className="grid gap-4 sm:grid-cols-2">
               {leagueOrgs.map((o) => (
-                <li key={o.id} className="py-3">
-                  <div className="font-medium">
-                    {o.nameShort} — {o.nameFull}
+                <div
+                  key={o.id}
+                  className="flex flex-col gap-3 rounded-lg border border-border bg-background/50 p-4 text-sm shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold leading-tight">{o.nameShort}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{o.nameFull}</div>
+                    </div>
+                    {o.logoUrl ? (
+                      <img
+                        src={o.logoUrl}
+                        alt=""
+                        className="h-12 w-12 shrink-0 rounded-md border border-border object-cover"
+                      />
+                    ) : (
+                      <div className="h-12 w-12 shrink-0 rounded-md border border-dashed border-border bg-muted/60" />
+                    )}
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {t("orgManage.lifecycleLabel")}: {t(`orgManage.lifecycle.${o.lifecycleStatus}`)}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <dl className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                    <dt className="text-muted-foreground">{t("orgManage.orgType")}</dt>
+                    <dd className="font-medium">{o.orgType}</dd>
+                    <dt className="text-muted-foreground">{t("orgManage.lifecycleLabel")}</dt>
+                    <dd className="font-medium">{t(`orgManage.lifecycle.${o.lifecycleStatus}`)}</dd>
+                    <dt className="text-muted-foreground">{t("orgManage.createdAtLabel")}</dt>
+                    <dd className="font-medium">{new Date(o.createdAt).toLocaleString()}</dd>
+                    <dt className="text-muted-foreground">{t("orgManage.advisorIdLabel")}</dt>
+                    <dd className="truncate font-mono text-[11px]" title={o.advisorUserId ?? ""}>
+                      {o.advisorUserId ? `${o.advisorUserId.slice(0, 8)}…` : "—"}
+                    </dd>
+                  </dl>
+                  <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
                     <select
                       className="rounded border border-input bg-background px-2 py-1 text-xs"
                       value={lcTarget[o.id] ?? o.lifecycleStatus}
@@ -387,7 +411,7 @@ export default function OrgManagePage() {
                       ))}
                     </select>
                     <input
-                      className="rounded border border-input bg-background px-2 py-1 text-xs max-w-xs"
+                      className="max-w-[160px] rounded border border-input bg-background px-2 py-1 text-xs"
                       placeholder={t("orgManage.reasonOptional")}
                       value={lcReason[o.id] ?? ""}
                       onChange={(e) =>
@@ -403,9 +427,9 @@ export default function OrgManagePage() {
                       {t("orgManage.applyLifecycle")}
                     </button>
                   </div>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </section>
       ) : null}

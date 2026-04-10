@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "db";
@@ -11,8 +11,16 @@ import {
   studentVolunteerEventClaims,
   volunteerRecords,
 } from "db/schema";
+import {
+  BASIC_KEYS,
+  mergeBasicI18n,
+  parseBasicI18n,
+  profileToJson,
+  triPhoneEmailFromBasic,
+} from "../lib/archive-profile-format.js";
 import { broadcastNotification } from "../lib/notification-broadcast.js";
 import { syncVolunteerRecordsForUser } from "../services/archive-volunteer-sync.js";
+import { fetchStudentArchiveDetail } from "../services/student-archive-read.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
@@ -52,49 +60,6 @@ const basicI18nSchema = z
     weibo: localeTriSchema.optional(),
   })
   .strict();
-
-const BASIC_KEYS = ["name", "phone", "wechat", "email", "github", "weibo"] as const;
-type BasicKey = (typeof BASIC_KEYS)[number];
-type BasicI18n = Partial<Record<BasicKey, { zh?: string; en?: string; ru?: string }>>;
-
-function parseBasicI18n(raw: unknown): BasicI18n {
-  if (raw === null || typeof raw !== "object") return {};
-  const o = raw as Record<string, unknown>;
-  const out: BasicI18n = {};
-  for (const k of BASIC_KEYS) {
-    const v = o[k];
-    if (v === null || typeof v !== "object") continue;
-    const tri = v as Record<string, unknown>;
-    out[k] = {
-      zh: typeof tri.zh === "string" ? tri.zh : undefined,
-      en: typeof tri.en === "string" ? tri.en : undefined,
-      ru: typeof tri.ru === "string" ? tri.ru : undefined,
-    };
-  }
-  return out;
-}
-
-function mergeBasicI18n(base: BasicI18n, patch: BasicI18n): BasicI18n {
-  const out: BasicI18n = { ...base };
-  for (const k of BASIC_KEYS) {
-    const p = patch[k];
-    if (!p) continue;
-    const prev = out[k] ?? {};
-    out[k] = { ...prev, ...p };
-  }
-  return out;
-}
-
-function triPhoneEmailFromBasic(
-  published: BasicI18n,
-): { phone: string | null; wechat: string | null } {
-  const phone = published.phone?.zh ?? published.phone?.en ?? published.phone?.ru ?? null;
-  const wechat = published.wechat?.zh ?? published.wechat?.en ?? published.wechat?.ru ?? null;
-  return {
-    phone: phone && phone.trim() ? phone.trim() : null,
-    wechat: wechat && wechat.trim() ? wechat.trim() : null,
-  };
-}
 
 const patchMeSchema = z
   .object({
@@ -150,171 +115,15 @@ const abilityCreateSchema = z
   })
   .strict();
 
-type ProfileRow = typeof studentProfiles.$inferSelect;
-
-function identityCompleteRow(p: ProfileRow): boolean {
-  const fields = [
-    p.nationality,
-    p.idNumber,
-    p.grade,
-    p.department,
-    p.major,
-    p.className,
-    p.volunteerNumber,
-    p.idPhotoUrl,
-    p.portraitUrl,
-  ];
-  return fields.every((x) => typeof x === "string" && x.trim().length > 0);
-}
-
-function profileToJson(p: ProfileRow) {
-  return {
-    userId: p.userId,
-    studentNo: p.studentNo,
-    volunteerNumber: p.volunteerNumber,
-    nationality: p.nationality,
-    idNumber: p.idNumber,
-    grade: p.grade,
-    department: p.department,
-    major: p.major,
-    className: p.className,
-    idPhotoUrl: p.idPhotoUrl,
-    portraitUrl: p.portraitUrl,
-    phone: p.phone,
-    wechat: p.wechat,
-    github: p.github,
-    weibo: p.weibo,
-    profileDraftPhone: p.profileDraftPhone,
-    profileDraftWechat: p.profileDraftWechat,
-    profileAuditStatus: p.profileAuditStatus,
-    profileAuditReason: p.profileAuditReason,
-    basicI18nPublished: parseBasicI18n(p.basicI18nPublished),
-    basicI18nDraft: p.basicI18nDraft === null ? null : parseBasicI18n(p.basicI18nDraft),
-    basicAuditStatus: p.basicAuditStatus,
-    basicAuditReason: p.basicAuditReason,
-  };
-}
-
-const ABILITY_CATEGORIES = [
-  "technical",
-  "planning",
-  "management",
-  "sports",
-] as const;
-
-function groupAbilityTags(
-  rows: { id: string; category: string; label: string }[],
-): Record<(typeof ABILITY_CATEGORIES)[number], { id: string; label: string }[]> {
-  const empty: Record<(typeof ABILITY_CATEGORIES)[number], { id: string; label: string }[]> = {
-    technical: [],
-    planning: [],
-    management: [],
-    sports: [],
-  };
-  for (const r of rows) {
-    const cat = r.category as (typeof ABILITY_CATEGORIES)[number];
-    if (empty[cat]) {
-      empty[cat].push({ id: r.id, label: r.label });
-    }
-  }
-  return empty;
-}
-
-function sumVolunteerHours(
-  records: { hours: string | number }[],
-): number {
-  return records.reduce((acc, r) => acc + Number.parseFloat(String(r.hours)), 0);
-}
-
 export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
   .use("*", sessionMiddleware)
   .get("/me", requireUser, async (c) => {
     const userId = c.get("userId")!;
-
-    const [profile] = await db
-      .select()
-      .from(studentProfiles)
-      .where(eq(studentProfiles.userId, userId))
-      .limit(1);
-
-    if (!profile) {
+    const bundle = await fetchStudentArchiveDetail(userId);
+    if (!bundle) {
       return c.json({ error: "Student profile not found" }, 404);
     }
-
-    const tags = await db
-      .select({
-        id: abilityTags.id,
-        category: abilityTags.category,
-        label: abilityTags.label,
-      })
-      .from(abilityTags)
-      .where(eq(abilityTags.userId, userId));
-
-    const awardRows = await db
-      .select({
-        id: awards.id,
-        title: awards.title,
-        proofUrl: awards.proofUrl,
-        status: awards.status,
-        reason: awards.reason,
-        decidedAt: awards.decidedAt,
-        createdAt: awards.createdAt,
-      })
-      .from(awards)
-      .where(eq(awards.userId, userId))
-      .orderBy(asc(awards.createdAt));
-
-    const vr = await db
-      .select({
-        id: volunteerRecords.id,
-        title: volunteerRecords.title,
-        hours: volunteerRecords.hours,
-        source: volunteerRecords.source,
-        externalRef: volunteerRecords.externalRef,
-        occurredAt: volunteerRecords.occurredAt,
-      })
-      .from(volunteerRecords)
-      .where(eq(volunteerRecords.volunteerNumber, profile.volunteerNumber))
-      .orderBy(asc(volunteerRecords.occurredAt));
-
-    const volunteerRecordsOut = vr.map((r) => ({
-      id: r.id,
-      title: r.title,
-      hours: Number.parseFloat(String(r.hours)),
-      source: r.source,
-      externalRef: r.externalRef,
-      occurredAt: r.occurredAt.toISOString(),
-    }));
-
-    const myAwards = awardRows.map((a) => ({
-      id: a.id,
-      title: a.title,
-      proofUrl: a.proofUrl,
-      status: a.status,
-      reason: a.reason,
-      decidedAt: a.decidedAt?.toISOString() ?? null,
-      createdAt: a.createdAt.toISOString(),
-    }));
-
-    const publicAwards = myAwards.filter((a) => a.status === "approved");
-
-    return c.json({
-      profile: profileToJson(profile),
-      identityComplete: identityCompleteRow(profile),
-      abilityTags: tags.map((t) => ({
-        id: t.id,
-        category: t.category,
-        label: t.label,
-      })),
-      abilityTagsByCategory: groupAbilityTags(tags),
-      awards: myAwards,
-      myAwards,
-      publicAwards,
-      volunteerSummary: {
-        totalHours: sumVolunteerHours(vr),
-        records: volunteerRecordsOut,
-      },
-    });
+    return c.json(bundle);
   })
   .patch("/me", requireUser, async (c) => {
     const userId = c.get("userId")!;

@@ -12,7 +12,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function AppLayout() {
   const { t, i18n } = useTranslation("common");
-  const { user } = useSession();
+  const { user, logout } = useSession();
   const showLeagueCoordination = user?.roles.includes("league_admin") ?? false;
   const showOrgManage =
     showLeagueCoordination ||
@@ -57,7 +57,21 @@ export default function AppLayout() {
               {t("nav.notifications")}
             </NavLink>
           </nav>
-          <div className="ml-auto flex gap-1">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {user ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="hidden max-w-[140px] truncate sm:inline" title={user.email}>
+                  {user.displayName ?? user.email}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void logout()}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  {t("nav.logout")}
+                </button>
+              </div>
+            ) : null}
             {(["zh", "en", "ru"] as const).map((lng) => (
               <button
                 key={lng}

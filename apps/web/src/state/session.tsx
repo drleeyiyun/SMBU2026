@@ -28,6 +28,7 @@ type SessionState = {
   loading: boolean;
   refreshMe: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
 };
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -84,9 +85,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser(await readJson<MeUser>(meRes));
   }, []);
 
+  const logout = useCallback(async () => {
+    await apiFetch("/auth/logout", { method: "POST" });
+    setUser(null);
+  }, []);
+
   const value = useMemo(
-    () => ({ user, loading, refreshMe, login }),
-    [user, loading, refreshMe, login],
+    () => ({ user, loading, refreshMe, login, logout }),
+    [user, loading, refreshMe, login, logout],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
