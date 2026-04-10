@@ -12,6 +12,7 @@ export type TimelinePlanInput = {
   startsAt: Date;
   endsAt: Date;
   location?: string | null;
+  priority?: number | null;
 };
 
 export type TimelineOrgTaskInput = {
@@ -31,15 +32,27 @@ export type TimelineCoordinationInput = {
   description?: string | null;
 };
 
+export type TimelineOrgPublishedInput = {
+  id: string;
+  orgId: string;
+  orgNameShort: string;
+  kind: string;
+  title: string;
+  startsAt: Date;
+  endsAt: Date;
+  description?: string | null;
+};
+
 export type MergeTimelineSourcesInput = {
   schedule: TimelineScheduleInput[];
   plans: TimelinePlanInput[];
   orgTasks: TimelineOrgTaskInput[];
   leagueCoordination: TimelineCoordinationInput[];
+  orgTimeline?: TimelineOrgPublishedInput[];
 };
 
 export type MergedTimelineItem = {
-  sourceType: "schedule" | "plan" | "org_task" | "league_coordination";
+  sourceType: "schedule" | "plan" | "org_task" | "league_coordination" | "org_timeline";
   sourceId: string;
   title: string;
   startsAt: Date;
@@ -63,14 +76,19 @@ export function mergeTimelineSources(input: MergeTimelineSourcesInput): MergedTi
   }
 
   for (const p of input.plans) {
+    const meta: Record<string, unknown> = {};
+    const pr = p.priority ?? 1;
+    meta.priority = pr;
+    if (p.location != null && String(p.location).length > 0) {
+      meta.location = p.location;
+    }
     items.push({
       sourceType: "plan",
       sourceId: p.id,
       title: p.title,
       startsAt: p.startsAt,
       endsAt: p.endsAt,
-      meta:
-        p.location != null && String(p.location).length > 0 ? { location: p.location } : undefined,
+      meta: Object.keys(meta).length > 0 ? meta : undefined,
     });
   }
 
@@ -96,6 +114,25 @@ export function mergeTimelineSources(input: MergeTimelineSourcesInput): MergedTi
       title: c.title,
       startsAt: c.startsAt,
       endsAt: c.endsAt,
+      meta,
+    });
+  }
+
+  for (const o of input.orgTimeline ?? []) {
+    const meta: { kind: string; orgId: string; orgNameShort: string; description?: string } = {
+      kind: o.kind,
+      orgId: o.orgId,
+      orgNameShort: o.orgNameShort,
+    };
+    if (o.description != null && String(o.description).length > 0) {
+      meta.description = o.description;
+    }
+    items.push({
+      sourceType: "org_timeline",
+      sourceId: o.id,
+      title: o.title,
+      startsAt: o.startsAt,
+      endsAt: o.endsAt,
       meta,
     });
   }

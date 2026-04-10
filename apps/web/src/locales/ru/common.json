@@ -48,7 +48,12 @@
     "categoryPractice": "Социальная практика",
     "categoryVolunteer": "Волонтёрство",
     "categoryWorkStudy": "Совмещение учёбы и работы",
-    "categoryGeneral": "Прочее"
+    "categoryGeneral": "Прочее",
+    "sourceOrgTimeline": "Расписание студ. орг.",
+    "sortGroupLabel": "Сортировка",
+    "sortByTime": "По времени",
+    "sortByPlanPriority": "Приоритет плана",
+    "planPriorityLabel": "Приоритет: {{value}}"
   },
   "plans": {
     "title": "Личные планы",
@@ -63,7 +68,10 @@
     "endsAt": "Окончание",
     "titleLabel": "Название",
     "empty": "Планов пока нет",
-    "loadError": "Не удалось загрузить планы"
+    "loadError": "Не удалось загрузить планы",
+    "listTitle": "Список планов",
+    "sortByTime": "По времени начала",
+    "sortByPriority": "По приоритету"
   },
   "oa": {
     "tabs": {
@@ -161,7 +169,34 @@
     "addMemberBtn": "Добавить",
     "leadershipLog": "Журнал изменений",
     "noEvents": "Записей нет",
-    "searchMin": "Не менее 2 символов для поиска"
+    "searchMin": "Не менее 2 символов для поиска",
+    "revisionColField": "Поле",
+    "revisionColBefore": "Сейчас",
+    "revisionColAfter": "Запрошено",
+    "revisionNoFields": "Нет изменений полей для отображения",
+    "revisionPayloadInvalid": "Некорректные данные правки",
+    "orgTimelineTitle": "Публикация на шкале (для всех студентов)",
+    "orgTimelineHint": "Совещания, задачи, мероприятия и этапы проектов отображаются на общей временной шкале.",
+    "orgTimelineInactive": "Организация на согласовании или приостановлена — публикация недоступна.",
+    "orgTimelineKindLabel": "Тип",
+    "orgTimelineEventTitle": "Заголовок",
+    "orgTimelineDescription": "Описание (необязательно)",
+    "orgTimelineStarts": "Начало",
+    "orgTimelineEnds": "Окончание",
+    "orgTimelinePublish": "Опубликовать",
+    "orgTimelineSave": "Сохранить",
+    "orgTimelineCancel": "Отмена",
+    "orgTimelineEdit": "Править",
+    "orgTimelineDelete": "Удалить",
+    "orgTimelineEmpty": "Записей расписания орг. пока нет",
+    "orgTimelineConfirmDelete": "Удалить эту запись на шкале?",
+    "orgTimelineKind": {
+      "meeting": "Совещание",
+      "work_task": "Рабочая задача",
+      "activity": "Мероприятие",
+      "innovation": "Проект / этап",
+      "other": "Другое"
+    }
   },
   "leagueCoordination": {
     "title": "Координация комсомольской организации",

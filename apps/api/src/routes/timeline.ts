@@ -4,8 +4,10 @@ import { z } from "zod";
 import { db } from "db";
 import {
   leagueCoordinationEvents,
+  organizations,
   orgTaskAssignments,
   orgTasks,
+  orgTimelineEvents,
   personalPlans,
   scheduleItemsCache,
 } from "db/schema";
@@ -57,7 +59,13 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
       gte(leagueCoordinationEvents.endsAt, from),
     );
 
-    const [scheduleRows, planRows, assignmentRows, coordinationRows] = await Promise.all([
+    const orgTimelineRangeOverlap = and(
+      lte(orgTimelineEvents.startsAt, to),
+      gte(orgTimelineEvents.endsAt, from),
+    );
+
+    const [scheduleRows, planRows, assignmentRows, coordinationRows, orgTimelineRows] =
+      await Promise.all([
       db
         .select({
           id: scheduleItemsCache.id,
@@ -75,6 +83,7 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
           title: personalPlans.title,
           startsAt: personalPlans.startsAt,
           endsAt: personalPlans.endsAt,
+          priority: personalPlans.priority,
         })
         .from(personalPlans)
         .where(
@@ -106,6 +115,23 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
         .from(leagueCoordinationEvents)
         .where(coordinationRangeOverlap)
         .orderBy(asc(leagueCoordinationEvents.startsAt)),
+      db
+        .select({
+          id: orgTimelineEvents.id,
+          orgId: orgTimelineEvents.orgId,
+          kind: orgTimelineEvents.kind,
+          title: orgTimelineEvents.title,
+          description: orgTimelineEvents.description,
+          startsAt: orgTimelineEvents.startsAt,
+          endsAt: orgTimelineEvents.endsAt,
+          orgNameShort: organizations.nameShort,
+        })
+        .from(orgTimelineEvents)
+        .innerJoin(organizations, eq(organizations.id, orgTimelineEvents.orgId))
+        .where(
+          and(eq(organizations.lifecycleStatus, "active"), orgTimelineRangeOverlap),
+        )
+        .orderBy(asc(orgTimelineEvents.startsAt)),
     ]);
 
     const now = new Date();
@@ -143,6 +169,7 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
         title: r.title,
         startsAt: r.startsAt,
         endsAt: r.endsAt,
+        priority: r.priority,
       })),
       orgTasks: orgTasksForMerge,
       leagueCoordination: coordinationRows.map((r) => ({
@@ -151,6 +178,16 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
         startsAt: r.startsAt,
         endsAt: r.endsAt,
         category: r.category,
+        description: r.description,
+      })),
+      orgTimeline: orgTimelineRows.map((r) => ({
+        id: r.id,
+        orgId: r.orgId,
+        orgNameShort: r.orgNameShort,
+        kind: r.kind as string,
+        title: r.title,
+        startsAt: r.startsAt,
+        endsAt: r.endsAt,
         description: r.description,
       })),
     });

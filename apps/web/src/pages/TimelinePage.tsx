@@ -140,6 +140,44 @@ function getMetaCategory(meta: unknown): string | null {
   return typeof c === "string" ? c : null;
 }
 
+function getPlanPriority(meta: unknown): number {
+  if (meta == null || typeof meta !== "object") return 1;
+  const p = (meta as { priority?: unknown }).priority;
+  return typeof p === "number" && !Number.isNaN(p) ? p : 1;
+}
+
+function getOrgTimelineMeta(meta: unknown): {
+  kind: string;
+  orgNameShort: string;
+  description?: string;
+} | null {
+  if (meta == null || typeof meta !== "object") return null;
+  const m = meta as { kind?: unknown; orgNameShort?: unknown; description?: unknown };
+  const kind = typeof m.kind === "string" ? m.kind : null;
+  const orgNameShort = typeof m.orgNameShort === "string" ? m.orgNameShort : null;
+  if (kind == null || orgNameShort == null) return null;
+  return {
+    kind,
+    orgNameShort,
+    description: typeof m.description === "string" ? m.description : undefined,
+  };
+}
+
+function orgTimelineKindLabelKey(kind: string): string {
+  switch (kind) {
+    case "meeting":
+      return "orgManage.orgTimelineKind.meeting";
+    case "work_task":
+      return "orgManage.orgTimelineKind.work_task";
+    case "activity":
+      return "orgManage.orgTimelineKind.activity";
+    case "innovation":
+      return "orgManage.orgTimelineKind.innovation";
+    default:
+      return "orgManage.orgTimelineKind.other";
+  }
+}
+
 function itemMatchesFilter(item: TimelineItem, filterText: string): boolean {
   const q = filterText.trim().toLowerCase();
   if (q.length === 0) return true;
@@ -159,6 +197,7 @@ const sourceTypeStyles: Record<string, string> = {
   plan: "border-l-4 border-l-emerald-500 bg-emerald-500/5",
   org_task: "border-l-4 border-l-amber-500 bg-amber-500/5",
   league_coordination: "border-l-4 border-l-violet-500 bg-violet-500/5",
+  org_timeline: "border-l-4 border-l-rose-500 bg-rose-500/5",
 };
 
 const legendColors: Record<string, string> = {
@@ -166,6 +205,7 @@ const legendColors: Record<string, string> = {
   plan: "bg-emerald-500",
   org_task: "bg-amber-500",
   league_coordination: "bg-violet-500",
+  org_timeline: "bg-rose-500",
 };
 
 function sourceTypeLabelKey(sourceType: string): string {
@@ -178,6 +218,8 @@ function sourceTypeLabelKey(sourceType: string): string {
       return "timeline.sourceOrgTask";
     case "league_coordination":
       return "timeline.sourceLeague";
+    case "org_timeline":
+      return "timeline.sourceOrgTimeline";
     default:
       return "timeline.sourceOrgTask";
   }
@@ -193,6 +235,7 @@ const btnToggleOff = "rounded-md border border-border bg-background px-3 py-2 te
 export default function TimelinePage() {
   const { t, i18n } = useTranslation("common");
   const [viewMode, setViewMode] = useState<"day" | "week" | "month">("week");
+  const [sortMode, setSortMode] = useState<"time" | "plan_priority">("time");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [filterText, setFilterText] = useState("");
   const [items, setItems] = useState<TimelineItem[]>([]);
@@ -327,9 +370,26 @@ export default function TimelinePage() {
     [items, filterText],
   );
 
+  const sortedFilteredItems = useMemo(() => {
+    const list = [...filteredItems];
+    if (sortMode === "time") {
+      list.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+      return list;
+    }
+    list.sort((a, b) => {
+      const ap = a.sourceType === "plan" ? getPlanPriority(a.meta) : Number.NEGATIVE_INFINITY;
+      const bp = b.sourceType === "plan" ? getPlanPriority(b.meta) : Number.NEGATIVE_INFINITY;
+      if (bp !== ap) {
+        return bp - ap;
+      }
+      return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+    });
+    return list;
+  }, [filteredItems, sortMode]);
+
   const weekGroups = useMemo(() => {
     const map = new Map<string, TimelineItem[]>();
-    for (const it of filteredItems) {
+    for (const it of sortedFilteredItems) {
       const key = localDayKey(it.startsAt);
       const list = map.get(key) ?? [];
       list.push(it);
@@ -337,7 +397,7 @@ export default function TimelinePage() {
     }
     const keys = [...map.keys()].sort();
     return keys.map((k) => ({ dayKey: k, items: map.get(k)! }));
-  }, [filteredItems]);
+  }, [sortedFilteredItems]);
 
   const monthDayDensity = useMemo(() => {
     const map = new Map<string, number>();
@@ -492,17 +552,24 @@ export default function TimelinePage() {
     { type: "schedule", labelKey: "timeline.sourceSchedule" },
     { type: "plan", labelKey: "timeline.sourcePlan" },
     { type: "org_task", labelKey: "timeline.sourceOrgTask" },
+    { type: "org_timeline", labelKey: "timeline.sourceOrgTimeline" },
     { type: "league_coordination", labelKey: "timeline.sourceLeague" },
   ];
 
   function renderItemRow(item: TimelineItem) {
     const style = sourceTypeStyles[item.sourceType] ?? "border-l-4 border-l-muted bg-muted/20";
     const cat = item.sourceType === "league_coordination" ? getMetaCategory(item.meta) : null;
+    const orgTm = item.sourceType === "org_timeline" ? getOrgTimelineMeta(item.meta) : null;
     const loc = getMetaLocation(item.meta);
-    const badgeText =
-      item.sourceType === "league_coordination" && cat != null
-        ? t(leagueCategoryKey(cat))
-        : t(sourceTypeLabelKey(item.sourceType));
+    const planPri = item.sourceType === "plan" ? getPlanPriority(item.meta) : null;
+    let badgeText: string;
+    if (item.sourceType === "league_coordination" && cat != null) {
+      badgeText = t(leagueCategoryKey(cat));
+    } else if (orgTm != null) {
+      badgeText = `${orgTm.orgNameShort} · ${t(orgTimelineKindLabelKey(orgTm.kind))}`;
+    } else {
+      badgeText = t(sourceTypeLabelKey(item.sourceType));
+    }
 
     return (
       <li
@@ -518,8 +585,16 @@ export default function TimelinePage() {
         <div className="text-xs text-muted-foreground">
           {formatDisplayDateTime(item.startsAt)} → {formatDisplayDateTime(item.endsAt)}
         </div>
+        {planPri != null ? (
+          <div className="text-xs text-muted-foreground">
+            {t("timeline.planPriorityLabel", { value: planPri })}
+          </div>
+        ) : null}
         {loc != null && loc.length > 0 ? (
           <div className="text-xs text-muted-foreground">{loc}</div>
+        ) : null}
+        {orgTm?.description != null && orgTm.description.length > 0 ? (
+          <div className="text-xs text-muted-foreground">{orgTm.description}</div>
         ) : null}
       </li>
     );
@@ -527,18 +602,36 @@ export default function TimelinePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <h1 className="text-xl font-semibold">{t("timeline.title")}</h1>
-        <div role="group" aria-label={t("timeline.title")} className="flex flex-wrap gap-2">
-          <button type="button" className={viewMode === "day" ? btnToggleOn : btnToggleOff} onClick={() => setViewMode("day")}>
-            {t("timeline.day")}
-          </button>
-          <button type="button" className={viewMode === "week" ? btnToggleOn : btnToggleOff} onClick={() => setViewMode("week")}>
-            {t("timeline.week")}
-          </button>
-          <button type="button" className={viewMode === "month" ? btnToggleOn : btnToggleOff} onClick={() => setViewMode("month")}>
-            {t("timeline.month")}
-          </button>
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <div role="group" aria-label={t("timeline.title")} className="flex flex-wrap gap-2">
+            <button type="button" className={viewMode === "day" ? btnToggleOn : btnToggleOff} onClick={() => setViewMode("day")}>
+              {t("timeline.day")}
+            </button>
+            <button type="button" className={viewMode === "week" ? btnToggleOn : btnToggleOff} onClick={() => setViewMode("week")}>
+              {t("timeline.week")}
+            </button>
+            <button type="button" className={viewMode === "month" ? btnToggleOn : btnToggleOff} onClick={() => setViewMode("month")}>
+              {t("timeline.month")}
+            </button>
+          </div>
+          <div role="group" aria-label={t("timeline.sortGroupLabel")} className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={sortMode === "time" ? btnToggleOn : btnToggleOff}
+              onClick={() => setSortMode("time")}
+            >
+              {t("timeline.sortByTime")}
+            </button>
+            <button
+              type="button"
+              className={sortMode === "plan_priority" ? btnToggleOn : btnToggleOff}
+              onClick={() => setSortMode("plan_priority")}
+            >
+              {t("timeline.sortByPlanPriority")}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -711,7 +804,7 @@ export default function TimelinePage() {
               })}
             </div>
           </div>
-        ) : filteredItems.length === 0 ? (
+        ) : sortedFilteredItems.length === 0 ? (
           <p className="text-muted-foreground">{t("timeline.empty")}</p>
         ) : viewMode === "week" ? (
           <div className="flex flex-col gap-6">
@@ -725,7 +818,7 @@ export default function TimelinePage() {
             ))}
           </div>
         ) : (
-          <ul className="flex flex-col gap-2">{filteredItems.map((it) => renderItemRow(it))}</ul>
+          <ul className="flex flex-col gap-2">{sortedFilteredItems.map((it) => renderItemRow(it))}</ul>
         )}
       </section>
     </div>

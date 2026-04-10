@@ -4,6 +4,18 @@ import { apiFetch, readErrorMessage, readJson } from "../lib/api";
 import { formatDisplayDateTime } from "../lib/format-date";
 import { useSession } from "../state/session";
 
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toDateTimeLocalValue(d: Date) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDateTimeLocal(s: string): Date {
+  return new Date(s);
+}
+
 type OrgJson = {
   id: string;
   nameFull: string;
@@ -19,10 +31,107 @@ type RevisionRow = {
   id: string;
   orgId: string;
   orgNameShort: string;
+  organizationBefore?: {
+    nameFull: string;
+    nameShort: string;
+    orgType: string;
+    logoUrl: string | null;
+  };
   status: string;
   payload: unknown;
   createdAt: string;
 };
+
+type OrgTimelineEvent = {
+  id: string;
+  orgId: string;
+  kind: string;
+  title: string;
+  description: string | null;
+  startsAt: string;
+  endsAt: string;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function PendingRevisionDiff({
+  organizationBefore,
+  payload,
+}: {
+  organizationBefore: NonNullable<RevisionRow["organizationBefore"]>;
+  payload: unknown;
+}) {
+  const { t } = useTranslation("common");
+  const fieldDefs = [
+    { key: "nameFull" as const, labelKey: "orgManage.nameFull" },
+    { key: "nameShort" as const, labelKey: "orgManage.nameShort" },
+    { key: "orgType" as const, labelKey: "orgManage.orgType" },
+    { key: "logoUrl" as const, labelKey: "orgManage.logoUrl" },
+  ];
+  if (payload == null || typeof payload !== "object") {
+    return (
+      <p className="mt-2 text-xs text-muted-foreground">{t("orgManage.revisionPayloadInvalid")}</p>
+    );
+  }
+  const p = payload as Record<string, unknown>;
+  const rows: { label: string; before: string; after: string }[] = [];
+  for (const f of fieldDefs) {
+    if (!(f.key in p)) continue;
+    const beforeRaw = organizationBefore[f.key];
+    const before =
+      f.key === "logoUrl"
+        ? beforeRaw == null || beforeRaw === ""
+          ? "—"
+          : String(beforeRaw)
+        : String(beforeRaw ?? "—");
+    const rawAfter = p[f.key];
+    const after =
+      rawAfter === null || (f.key === "logoUrl" && rawAfter === "")
+        ? "—"
+        : typeof rawAfter === "string"
+          ? rawAfter
+          : String(rawAfter);
+    rows.push({ label: t(f.labelKey), before, after });
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="mt-2 text-xs text-muted-foreground">{t("orgManage.revisionNoFields")}</p>
+    );
+  }
+  return (
+    <div className="mt-2 overflow-x-auto rounded-md border border-border">
+      <table className="w-full border-collapse text-left text-xs">
+        <thead className="bg-muted/50">
+          <tr>
+            <th className="border-b border-border px-2 py-1.5 font-medium">
+              {t("orgManage.revisionColField")}
+            </th>
+            <th className="border-b border-border px-2 py-1.5 font-medium">
+              {t("orgManage.revisionColBefore")}
+            </th>
+            <th className="border-b border-border px-2 py-1.5 font-medium">
+              {t("orgManage.revisionColAfter")}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td className="border-b border-border/80 px-2 py-1.5 align-top text-muted-foreground">
+                {row.label}
+              </td>
+              <td className="border-b border-border/80 px-2 py-1.5 align-top">{row.before}</td>
+              <td className="border-b border-border/80 px-2 py-1.5 align-top font-medium text-foreground">
+                {row.after}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 type LeadershipEvent = {
   id: string;
@@ -77,6 +186,18 @@ export default function OrgManagePage() {
   const [instrQuery, setInstrQuery] = useState("");
   const [instrHits, setInstrHits] = useState<Array<{ id: string; displayName: string }>>([]);
 
+  const [orgTimelineEvents, setOrgTimelineEvents] = useState<OrgTimelineEvent[]>([]);
+  const [otKind, setOtKind] = useState<"meeting" | "work_task" | "activity" | "innovation">(
+    "meeting",
+  );
+  const [otTitle, setOtTitle] = useState("");
+  const [otDescription, setOtDescription] = useState("");
+  const [otStarts, setOtStarts] = useState(() => toDateTimeLocalValue(new Date()));
+  const [otEnds, setOtEnds] = useState(() =>
+    toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)),
+  );
+  const [otEditingId, setOtEditingId] = useState<string | null>(null);
+
   useEffect(() => {
     if (memberships.length > 0 && !officerOrgId) {
       setOfficerOrgId(memberships[0]!.orgId);
@@ -125,6 +246,20 @@ export default function OrgManagePage() {
       const eb = await readJson<{ events: LeadershipEvent[] }>(er);
       setEvents(eb.events);
     }
+    const tr = await apiFetch(`/orgs/${orgId}/timeline-events`);
+    if (tr.ok) {
+      const tb = await readJson<{ events: OrgTimelineEvent[] }>(tr);
+      setOrgTimelineEvents(tb.events);
+    } else {
+      setOrgTimelineEvents([]);
+    }
+    setOtTitle("");
+    setOtDescription("");
+    setOtKind("meeting");
+    setOtEditingId(null);
+    const now = new Date();
+    setOtStarts(toDateTimeLocalValue(now));
+    setOtEnds(toDateTimeLocalValue(new Date(now.getTime() + 60 * 60 * 1000)));
     setError(null);
   }, []);
 
@@ -286,6 +421,96 @@ export default function OrgManagePage() {
     const body = await readJson<{ users: Array<{ id: string; displayName: string }> }>(res);
     setInstrHits(body.users);
     setError(null);
+  };
+
+  const submitOrgTimeline = async () => {
+    if (!officerOrgId || !orgDetail) return;
+    if (orgDetail.lifecycleStatus !== "active") {
+      setError(t("orgManage.orgTimelineInactive"));
+      return;
+    }
+    const title = otTitle.trim();
+    if (!title) return;
+    const starts = fromDateTimeLocal(otStarts);
+    const ends = fromDateTimeLocal(otEnds);
+    if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime()) || starts >= ends) {
+      setError(t("timeline.errorInvalidRange"));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        kind: otKind,
+        title,
+        startsAt: starts.toISOString(),
+        endsAt: ends.toISOString(),
+        description: otDescription.trim() === "" ? null : otDescription.trim(),
+      };
+      const url =
+        otEditingId == null
+          ? `/orgs/${officerOrgId}/timeline-events`
+          : `/orgs/${officerOrgId}/timeline-events/${otEditingId}`;
+      const res = await apiFetch(url, {
+        method: otEditingId == null ? "POST" : "PATCH",
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        setError(await readErrorMessage(res));
+        return;
+      }
+      setOtTitle("");
+      setOtDescription("");
+      setOtEditingId(null);
+      setOtKind("meeting");
+      const n = new Date();
+      setOtStarts(toDateTimeLocalValue(n));
+      setOtEnds(toDateTimeLocalValue(new Date(n.getTime() + 60 * 60 * 1000)));
+      await loadOfficerOrg(officerOrgId);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startEditOrgTimeline = (e: OrgTimelineEvent) => {
+    setOtEditingId(e.id);
+    setOtKind(e.kind as typeof otKind);
+    setOtTitle(e.title);
+    setOtDescription(e.description ?? "");
+    setOtStarts(toDateTimeLocalValue(new Date(e.startsAt)));
+    setOtEnds(toDateTimeLocalValue(new Date(e.endsAt)));
+  };
+
+  const cancelOrgTimelineForm = () => {
+    setOtEditingId(null);
+    setOtTitle("");
+    setOtDescription("");
+    setOtKind("meeting");
+    const n = new Date();
+    setOtStarts(toDateTimeLocalValue(n));
+    setOtEnds(toDateTimeLocalValue(new Date(n.getTime() + 60 * 60 * 1000)));
+  };
+
+  const deleteOrgTimelineEvent = async (eventId: string) => {
+    if (!officerOrgId) return;
+    if (!window.confirm(t("orgManage.orgTimelineConfirmDelete"))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/orgs/${officerOrgId}/timeline-events/${eventId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setError(await readErrorMessage(res));
+        return;
+      }
+      if (otEditingId === eventId) {
+        cancelOrgTimelineForm();
+      }
+      await loadOfficerOrg(officerOrgId);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const addMember = async () => {
@@ -452,9 +677,13 @@ export default function OrgManagePage() {
                   <div className="font-medium">
                     {r.orgNameShort} · {formatDisplayDateTime(r.createdAt)}
                   </div>
-                  <pre className="mt-2 max-h-28 overflow-auto rounded bg-muted/50 p-2 text-xs">
-                    {JSON.stringify(r.payload, null, 2)}
-                  </pre>
+                  {r.organizationBefore ? (
+                    <PendingRevisionDiff organizationBefore={r.organizationBefore} payload={r.payload} />
+                  ) : (
+                    <pre className="mt-2 max-h-28 overflow-auto rounded bg-muted/50 p-2 text-xs">
+                      {JSON.stringify(r.payload, null, 2)}
+                    </pre>
+                  )}
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -562,6 +791,120 @@ export default function OrgManagePage() {
                     {t("orgManage.submitRevision")}
                   </button>
                 </div>
+              </div>
+
+              <div>
+                <h3 className="mb-2 font-medium">{t("orgManage.orgTimelineTitle")}</h3>
+                <p className="mb-2 text-xs text-muted-foreground">{t("orgManage.orgTimelineHint")}</p>
+                {orgDetail.lifecycleStatus !== "active" ? (
+                  <p className="text-sm text-muted-foreground">{t("orgManage.orgTimelineInactive")}</p>
+                ) : (
+                  <>
+                    <div className="mb-4 grid max-w-lg gap-2">
+                      <label className="text-xs text-muted-foreground">
+                        {t("orgManage.orgTimelineKindLabel")}
+                        <select
+                          className={`${inputClass} mt-1`}
+                          value={otKind}
+                          onChange={(e) => setOtKind(e.target.value as typeof otKind)}
+                        >
+                          <option value="meeting">{t("orgManage.orgTimelineKind.meeting")}</option>
+                          <option value="work_task">{t("orgManage.orgTimelineKind.work_task")}</option>
+                          <option value="activity">{t("orgManage.orgTimelineKind.activity")}</option>
+                          <option value="innovation">{t("orgManage.orgTimelineKind.innovation")}</option>
+                        </select>
+                      </label>
+                      <input
+                        className={inputClass}
+                        value={otTitle}
+                        onChange={(e) => setOtTitle(e.target.value)}
+                        placeholder={t("orgManage.orgTimelineEventTitle")}
+                      />
+                      <textarea
+                        className={`${inputClass} min-h-[4rem]`}
+                        value={otDescription}
+                        onChange={(e) => setOtDescription(e.target.value)}
+                        placeholder={t("orgManage.orgTimelineDescription")}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                          {t("orgManage.orgTimelineStarts")}
+                          <input
+                            type="datetime-local"
+                            className={inputClass}
+                            value={otStarts}
+                            onChange={(e) => setOtStarts(e.target.value)}
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                          {t("orgManage.orgTimelineEnds")}
+                          <input
+                            type="datetime-local"
+                            className={inputClass}
+                            value={otEnds}
+                            onChange={(e) => setOtEnds(e.target.value)}
+                          />
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={btnPrimary}
+                          disabled={busy}
+                          onClick={() => void submitOrgTimeline()}
+                        >
+                          {otEditingId ? t("orgManage.orgTimelineSave") : t("orgManage.orgTimelinePublish")}
+                        </button>
+                        {otEditingId ? (
+                          <button type="button" className={btnGhost} disabled={busy} onClick={cancelOrgTimelineForm}>
+                            {t("orgManage.orgTimelineCancel")}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                    {orgTimelineEvents.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{t("orgManage.orgTimelineEmpty")}</p>
+                    ) : (
+                      <ul className="flex max-w-2xl flex-col gap-2 text-sm">
+                        {orgTimelineEvents.map((ev) => (
+                          <li
+                            key={ev.id}
+                            className="flex flex-col gap-2 rounded-md border border-border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <div className="font-medium">{ev.title}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {t(`orgManage.orgTimelineKind.${ev.kind}`, { defaultValue: ev.kind })} ·{" "}
+                                {formatDisplayDateTime(ev.startsAt)} — {formatDisplayDateTime(ev.endsAt)}
+                              </div>
+                              {ev.description ? (
+                                <div className="text-xs text-muted-foreground">{ev.description}</div>
+                              ) : null}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                className={btnGhost}
+                                disabled={busy}
+                                onClick={() => startEditOrgTimeline(ev)}
+                              >
+                                {t("orgManage.orgTimelineEdit")}
+                              </button>
+                              <button
+                                type="button"
+                                className={btnDanger}
+                                disabled={busy}
+                                onClick={() => void deleteOrgTimelineEvent(ev.id)}
+                              >
+                                {t("orgManage.orgTimelineDelete")}
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
               </div>
 
               <div>

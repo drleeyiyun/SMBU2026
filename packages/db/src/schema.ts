@@ -351,6 +351,34 @@ export const leagueCoordinationEvents = pgTable(
   ],
 );
 
+export const orgTimelineEventKindEnum = pgEnum("org_timeline_event_kind", [
+  "meeting",
+  "work_task",
+  "activity",
+  "innovation",
+]);
+
+export const orgTimelineEvents = pgTable(
+  "org_timeline_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: orgTimelineEventKindEnum("kind").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("org_timeline_org_range_idx").on(t.orgId, t.startsAt, t.endsAt)],
+);
+
 export const studentVolunteerEventClaims = pgTable(
   "student_volunteer_event_claims",
   {

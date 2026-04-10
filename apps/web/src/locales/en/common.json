@@ -48,7 +48,12 @@
     "categoryPractice": "Social practice",
     "categoryVolunteer": "Volunteering",
     "categoryWorkStudy": "Work-study",
-    "categoryGeneral": "General"
+    "categoryGeneral": "General",
+    "sourceOrgTimeline": "Student org schedule",
+    "sortGroupLabel": "Sort list",
+    "sortByTime": "By time",
+    "sortByPlanPriority": "Plan priority",
+    "planPriorityLabel": "Priority: {{value}}"
   },
   "plans": {
     "title": "Personal plans",
@@ -63,7 +68,10 @@
     "endsAt": "Ends at",
     "titleLabel": "Title",
     "empty": "No plans yet",
-    "loadError": "Could not load plans"
+    "loadError": "Could not load plans",
+    "listTitle": "Your plans",
+    "sortByTime": "By start time",
+    "sortByPriority": "By priority"
   },
   "oa": {
     "tabs": {
@@ -161,7 +169,34 @@
     "addMemberBtn": "Add",
     "leadershipLog": "Leadership change log",
     "noEvents": "No events yet",
-    "searchMin": "Enter at least 2 characters to search"
+    "searchMin": "Enter at least 2 characters to search",
+    "revisionColField": "Field",
+    "revisionColBefore": "Current",
+    "revisionColAfter": "Requested",
+    "revisionNoFields": "No field-level changes to display",
+    "revisionPayloadInvalid": "Invalid revision payload",
+    "orgTimelineTitle": "Publish to timeline (all students)",
+    "orgTimelineHint": "Meetings, work items, activities, and innovation milestones appear on every student timeline.",
+    "orgTimelineInactive": "Organizations pending approval or suspended cannot publish.",
+    "orgTimelineKindLabel": "Kind",
+    "orgTimelineEventTitle": "Title",
+    "orgTimelineDescription": "Description (optional)",
+    "orgTimelineStarts": "Starts",
+    "orgTimelineEnds": "Ends",
+    "orgTimelinePublish": "Publish",
+    "orgTimelineSave": "Save",
+    "orgTimelineCancel": "Cancel",
+    "orgTimelineEdit": "Edit",
+    "orgTimelineDelete": "Delete",
+    "orgTimelineEmpty": "No org timeline entries yet",
+    "orgTimelineConfirmDelete": "Delete this timeline entry?",
+    "orgTimelineKind": {
+      "meeting": "Meeting",
+      "work_task": "Work task",
+      "activity": "Activity",
+      "innovation": "Innovation / milestone",
+      "other": "Other"
+    }
   },
   "leagueCoordination": {
     "title": "League coordination",

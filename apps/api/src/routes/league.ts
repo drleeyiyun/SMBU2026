@@ -96,6 +96,9 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
       .select({
         revision: orgRevisions,
         orgNameShort: organizations.nameShort,
+        orgNameFull: organizations.nameFull,
+        orgType: organizations.orgType,
+        orgLogoUrl: organizations.logoUrl,
       })
       .from(orgRevisions)
       .innerJoin(organizations, eq(organizations.id, orgRevisions.orgId))
@@ -107,6 +110,12 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
         id: r.revision.id,
         orgId: r.revision.orgId,
         orgNameShort: r.orgNameShort,
+        organizationBefore: {
+          nameFull: r.orgNameFull,
+          nameShort: r.orgNameShort,
+          orgType: r.orgType,
+          logoUrl: r.orgLogoUrl,
+        },
         status: r.revision.status,
         payload: JSON.parse(r.revision.payloadJson) as unknown,
         createdAt: r.revision.createdAt.toISOString(),

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "db";
@@ -10,9 +10,11 @@ import {
   orgTaskInvolvedOrgs,
   orgTasks,
   orgTaskAssignments,
+  orgTimelineEvents,
   userRoles,
   users,
 } from "db/schema";
+import { broadcastTimelineRefresh } from "../lib/timeline-broadcast.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
@@ -174,6 +176,45 @@ const memberPatchSchema = z
     title: z.union([z.string(), z.null()]),
   })
   .strict();
+
+const orgTimelineKindSchema = z.enum(["meeting", "work_task", "activity", "innovation"]);
+
+const orgTimelineIso = z.string().datetime({ offset: true }).transform((s) => new Date(s));
+
+const orgTimelineEventCreateSchema = z
+  .object({
+    kind: orgTimelineKindSchema,
+    title: z.string().min(1),
+    description: z.union([z.string(), z.null()]).optional(),
+    startsAt: orgTimelineIso,
+    endsAt: orgTimelineIso,
+  })
+  .strict();
+
+const orgTimelineEventPatchSchema = z
+  .object({
+    kind: orgTimelineKindSchema.optional(),
+    title: z.string().min(1).optional(),
+    description: z.union([z.string(), z.null()]).optional(),
+    startsAt: orgTimelineIso.optional(),
+    endsAt: orgTimelineIso.optional(),
+  })
+  .strict();
+
+function orgTimelineEventToJson(row: typeof orgTimelineEvents.$inferSelect) {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    kind: row.kind as string,
+    title: row.title,
+    description: row.description ?? null,
+    startsAt: row.startsAt.toISOString(),
+    endsAt: row.endsAt.toISOString(),
+    createdByUserId: row.createdByUserId,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
 
 export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
   .use("*", sessionMiddleware)
@@ -505,6 +546,170 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
         createdAt: e.createdAt.toISOString(),
       })),
     });
+  })
+  .get("/:orgId/timeline-events", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    if (!isUuid(orgId)) {
+      return c.json({ error: "Invalid org id" }, 400);
+    }
+    const userId = c.get("userId")!;
+    if (!(await canViewOrgDetails(userId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const fromQ = c.req.query("from");
+    const toQ = c.req.query("to");
+    let rangeCond: ReturnType<typeof and> | undefined;
+    if (fromQ !== undefined && toQ !== undefined) {
+      const from = new Date(fromQ);
+      const to = new Date(toQ);
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) {
+        return c.json({ error: "Invalid from/to range" }, 400);
+      }
+      rangeCond = and(lte(orgTimelineEvents.startsAt, to), gte(orgTimelineEvents.endsAt, from));
+    }
+
+    const whereClause =
+      rangeCond === undefined
+        ? eq(orgTimelineEvents.orgId, orgId)
+        : and(eq(orgTimelineEvents.orgId, orgId), rangeCond);
+
+    const rows = await db
+      .select()
+      .from(orgTimelineEvents)
+      .where(whereClause)
+      .orderBy(asc(orgTimelineEvents.startsAt));
+
+    return c.json({ events: rows.map(orgTimelineEventToJson) });
+  })
+  .post("/:orgId/timeline-events", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    if (!isUuid(orgId)) {
+      return c.json({ error: "Invalid org id" }, 400);
+    }
+    const userId = c.get("userId")!;
+    if (!(await canSubmitOrgRevision(userId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+    if (org.lifecycleStatus !== "active") {
+      return c.json({ error: "Organization must be active to publish timeline events" }, 409);
+    }
+
+    const raw = await parseJsonBody(c);
+    if (raw === null || typeof raw !== "object") {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const parsed = orgTimelineEventCreateSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+    }
+    const { kind, title, description, startsAt, endsAt } = parsed.data;
+    if (startsAt >= endsAt) {
+      return c.json({ error: "startsAt must be before endsAt" }, 400);
+    }
+
+    const [row] = await db
+      .insert(orgTimelineEvents)
+      .values({
+        orgId,
+        kind,
+        title,
+        description: description ?? null,
+        startsAt,
+        endsAt,
+        createdByUserId: userId,
+      })
+      .returning();
+
+    await broadcastTimelineRefresh({ kind: "timeline_refresh", action: "upsert" });
+
+    return c.json({ event: orgTimelineEventToJson(row!) }, 201);
+  })
+  .patch("/:orgId/timeline-events/:eventId", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    const eventId = c.req.param("eventId");
+    if (!isUuid(orgId) || !isUuid(eventId)) {
+      return c.json({ error: "Invalid id" }, 400);
+    }
+    const userId = c.get("userId")!;
+    if (!(await canSubmitOrgRevision(userId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const raw = await parseJsonBody(c);
+    if (raw === null || typeof raw !== "object") {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const parsed = orgTimelineEventPatchSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+    }
+    const patch = parsed.data;
+    if (Object.keys(patch).length === 0) {
+      return c.json({ error: "No fields to update" }, 400);
+    }
+
+    const [existing] = await db
+      .select()
+      .from(orgTimelineEvents)
+      .where(and(eq(orgTimelineEvents.id, eventId), eq(orgTimelineEvents.orgId, orgId)))
+      .limit(1);
+    if (!existing) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    const nextStarts = patch.startsAt ?? existing.startsAt;
+    const nextEnds = patch.endsAt ?? existing.endsAt;
+    if (nextStarts >= nextEnds) {
+      return c.json({ error: "startsAt must be before endsAt" }, 400);
+    }
+
+    const updateValues: Partial<typeof orgTimelineEvents.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    if (patch.kind !== undefined) updateValues.kind = patch.kind;
+    if (patch.title !== undefined) updateValues.title = patch.title;
+    if (patch.description !== undefined) updateValues.description = patch.description;
+    if (patch.startsAt !== undefined) updateValues.startsAt = patch.startsAt;
+    if (patch.endsAt !== undefined) updateValues.endsAt = patch.endsAt;
+
+    const [row] = await db
+      .update(orgTimelineEvents)
+      .set(updateValues)
+      .where(and(eq(orgTimelineEvents.id, eventId), eq(orgTimelineEvents.orgId, orgId)))
+      .returning();
+
+    await broadcastTimelineRefresh({ kind: "timeline_refresh", action: "upsert" });
+
+    return c.json({ event: orgTimelineEventToJson(row!) });
+  })
+  .delete("/:orgId/timeline-events/:eventId", requireUser, async (c) => {
+    const orgId = c.req.param("orgId");
+    const eventId = c.req.param("eventId");
+    if (!isUuid(orgId) || !isUuid(eventId)) {
+      return c.json({ error: "Invalid id" }, 400);
+    }
+    const userId = c.get("userId")!;
+    if (!(await canSubmitOrgRevision(userId, orgId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const deleted = await db
+      .delete(orgTimelineEvents)
+      .where(and(eq(orgTimelineEvents.id, eventId), eq(orgTimelineEvents.orgId, orgId)))
+      .returning({ id: orgTimelineEvents.id });
+
+    if (deleted.length === 0) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    await broadcastTimelineRefresh({ kind: "timeline_refresh", action: "delete" });
+
+    return c.body(null, 204);
   })
   .post("/:orgId/members", requireUser, async (c) => {
     const orgId = c.req.param("orgId");

@@ -48,7 +48,12 @@
     "categoryPractice": "社会实践",
     "categoryVolunteer": "志愿服务",
     "categoryWorkStudy": "勤工助学",
-    "categoryGeneral": "其他"
+    "categoryGeneral": "其他",
+    "sourceOrgTimeline": "社团日程",
+    "sortGroupLabel": "列表排序",
+    "sortByTime": "按时间",
+    "sortByPlanPriority": "个人计划优先级",
+    "planPriorityLabel": "优先级：{{value}}"
   },
   "plans": {
     "title": "个人计划",
@@ -63,7 +68,10 @@
     "endsAt": "结束时间",
     "titleLabel": "标题",
     "empty": "暂无计划",
-    "loadError": "无法加载计划列表"
+    "loadError": "无法加载计划列表",
+    "listTitle": "计划列表",
+    "sortByTime": "按时间",
+    "sortByPriority": "按优先级"
   },
   "oa": {
     "tabs": {
@@ -161,7 +169,34 @@
     "addMemberBtn": "添加",
     "leadershipLog": "负责人与指导变更记录",
     "noEvents": "暂无记录",
-    "searchMin": "搜索词至少 2 个字符"
+    "searchMin": "搜索词至少 2 个字符",
+    "revisionColField": "字段",
+    "revisionColBefore": "当前值",
+    "revisionColAfter": "申请变更",
+    "revisionNoFields": "未包含可展示的字段变更",
+    "revisionPayloadInvalid": "无法解析修订内容",
+    "orgTimelineTitle": "时间轴发布（全体成员可见）",
+    "orgTimelineHint": "会议、工作任务、活动安排、大创/项目节点等将出现在所有的学生时间轴中。",
+    "orgTimelineInactive": "社团处于待审或暂停状态时无法发布。",
+    "orgTimelineKindLabel": "类型",
+    "orgTimelineEventTitle": "标题",
+    "orgTimelineDescription": "说明（可选）",
+    "orgTimelineStarts": "开始",
+    "orgTimelineEnds": "结束",
+    "orgTimelinePublish": "发布",
+    "orgTimelineSave": "保存修改",
+    "orgTimelineCancel": "取消编辑",
+    "orgTimelineEdit": "编辑",
+    "orgTimelineDelete": "删除",
+    "orgTimelineEmpty": "尚未发布任何日程条目",
+    "orgTimelineConfirmDelete": "确定删除该时间轴条目？",
+    "orgTimelineKind": {
+      "meeting": "会议",
+      "work_task": "工作任务",
+      "activity": "活动安排",
+      "innovation": "大创/项目节点",
+      "other": "其他"
+    }
   },
   "leagueCoordination": {
     "title": "团委统筹",

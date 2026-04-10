@@ -51,12 +51,14 @@ export default function PlansPage() {
   const [priority, setPriority] = useState(1);
   const [status, setStatus] = useState("planned");
   const [onTimeline, setOnTimeline] = useState(true);
+  const [listSort, setListSort] = useState<"time" | "priority">("time");
 
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
-      const res = await apiFetch("/plans");
+      const qs = listSort === "priority" ? "?sort=priority" : "";
+      const res = await apiFetch(`/plans${qs}`);
       if (!res.ok) {
         setError(await readErrorMessage(res));
         setPlans([]);
@@ -67,7 +69,7 @@ export default function PlansPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [listSort]);
 
   useEffect(() => {
     void load();
@@ -265,6 +267,25 @@ export default function PlansPage() {
       </section>
 
       <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-semibold">{t("plans.listTitle")}</h3>
+          <div role="group" className="flex flex-wrap gap-2 text-sm">
+            <button
+              type="button"
+              className={listSort === "time" ? btnPrimary : btnGhost}
+              onClick={() => setListSort("time")}
+            >
+              {t("plans.sortByTime")}
+            </button>
+            <button
+              type="button"
+              className={listSort === "priority" ? btnPrimary : btnGhost}
+              onClick={() => setListSort("priority")}
+            >
+              {t("plans.sortByPriority")}
+            </button>
+          </div>
+        </div>
         {loading ? (
           <p className="text-sm text-muted-foreground">{t("timeline.loading")}</p>
         ) : plans.length === 0 ? (

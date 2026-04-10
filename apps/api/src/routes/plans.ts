@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "db";
@@ -58,11 +58,16 @@ export const plansRouter = new Hono<{ Variables: AuthVariables }>()
   .use("*", sessionMiddleware, requireUser)
   .get("/", async (c) => {
     const userId = c.get("userId")!;
+    const sort = c.req.query("sort");
+    const order =
+      sort === "priority"
+        ? [desc(personalPlans.priority), asc(personalPlans.startsAt)]
+        : [asc(personalPlans.startsAt)];
     const rows = await db
       .select()
       .from(personalPlans)
       .where(eq(personalPlans.userId, userId))
-      .orderBy(asc(personalPlans.startsAt));
+      .orderBy(...order);
     return c.json({ plans: rows.map(planToJson) });
   })
   .post("/", async (c) => {

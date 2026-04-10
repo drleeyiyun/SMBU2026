@@ -31,6 +31,24 @@ describe("mergeTimelineSources", () => {
     expect(row.meta).toEqual({ location: "Hall A" });
   });
 
+  it("includes plan priority in meta", () => {
+    const merged = mergeTimelineSources({
+      schedule: [],
+      plans: [
+        {
+          id: "p1",
+          title: "Study",
+          startsAt: new Date("2026-04-02T10:00:00.000Z"),
+          endsAt: new Date("2026-04-02T11:00:00.000Z"),
+          priority: 4,
+        },
+      ],
+      orgTasks: [],
+      leagueCoordination: [],
+    });
+    expect(merged[0]!.meta).toEqual({ priority: 4 });
+  });
+
   it("sorts by startsAt ascending across sources", () => {
     const merged = mergeTimelineSources({
       schedule: [
@@ -93,6 +111,34 @@ describe("mergeTimelineSources", () => {
     ]);
     const row = merged.find((m) => m.sourceType === "league_coordination")!;
     expect(row.meta).toMatchObject({ category: "volunteer" });
+  });
+
+  it("includes org_timeline with kind and org in meta", () => {
+    const merged = mergeTimelineSources({
+      schedule: [],
+      plans: [],
+      orgTasks: [],
+      leagueCoordination: [],
+      orgTimeline: [
+        {
+          id: "e1",
+          orgId: "0192a000-0000-7000-8000-000000000099",
+          orgNameShort: "摄影社",
+          kind: "meeting",
+          title: "例会",
+          startsAt: new Date("2026-04-02T08:00:00.000Z"),
+          endsAt: new Date("2026-04-02T09:00:00.000Z"),
+          description: "301 教室",
+        },
+      ],
+    });
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.sourceType).toBe("org_timeline");
+    expect(merged[0]!.meta).toMatchObject({
+      kind: "meeting",
+      orgNameShort: "摄影社",
+      description: "301 教室",
+    });
   });
 });
 
