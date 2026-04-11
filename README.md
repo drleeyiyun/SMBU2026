@@ -35,17 +35,20 @@ Compose 服务说明：
 
 ## Demo accounts / 演示账号
 
-密码均为 **`Demo#2026`**。
+密码均为 **`Demo#2026`**（师生录入创建的新账号由管理员自行设定初始密码）。
 
 | 角色 Role | 邮箱 Email |
 |-----------|------------|
 | 学生 Student | `student@demo.school` |
 | 社团负责人 Org leader | `leader@demo.school` |
 | 团委/联盟管理员 League admin | `league@demo.school` |
+| **数据管理员（仅团委权限，用于师生录入演示）** | `dataadmin@demo.school` |
 | 指导老师 Instructor | `instructor@demo.school` |
 | 额外学生（青协骨干，可登录） | `student-amy@demo.school` |
 | 额外学生（仅学生角色、未加入社团，便于测试指派检索） | `student-bob@demo.school` |
 | 额外指导老师 | `instructor-chen@demo.school`、`instructor-ding@demo.school` |
+
+登录 `dataadmin@demo.school` 或 `league@demo.school` 后，导航中可见 **「师生录入」**，可在表单中新增教师或学生账号（学生需填写唯一志愿者号等档案字段）。
 
 ---
 
@@ -56,7 +59,7 @@ Compose 服务说明：
 - **如何录入数据：**
   - **演示库重置：** 配置好 `DATABASE_URL` 后执行 `pnpm db:migrate`，再执行 **`pnpm db:seed`**。种子脚本会清空业务表并写入演示用户、社团、任务、时间轴缓存等（可反复执行，**仅适用于开发库**）。
   - **日常增量：** 使用各页面功能（注册流程若未开放则依赖种子用户登录后操作），或直接调用对应 REST接口（需携带会话 Cookie或后续若开放的服务端密钥）。
-
+**种子用户（seed users）** 不是另一种登录方式，而是 `pnpm db:seed` 写入数据库的一批**普通用户记录**。登录方式与所有人相同：`POST /auth/login` + 邮箱、密码；系统**没有**开放自助注册，因此演示或开发环境里新账号要么来自种子，要么由**团委管理员**在 **「师生录入」** 页面（`/app/league/roster`，需 `league_admin` 角色）创建。
 ---
 
 ## Optional: local dev with Postgres / 可选：本地 Postgres + pnpm 开发

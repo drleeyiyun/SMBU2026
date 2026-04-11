@@ -60,6 +60,7 @@ async function main(): Promise<void> {
       studentBob,
       instructorChen,
       instructorDing,
+      dataAdmin,
     ] = await tx
       .insert(schema.users)
       .values([
@@ -111,6 +112,12 @@ async function main(): Promise<void> {
           displayName: "演示教师 丁老师",
           preferredLocale: "zh",
         },
+        {
+          email: "dataadmin@demo.school",
+          passwordHash,
+          displayName: "Demo Data Admin",
+          preferredLocale: "zh",
+        },
       ])
       .returning();
 
@@ -122,7 +129,8 @@ async function main(): Promise<void> {
       !studentAmy ||
       !studentBob ||
       !instructorChen ||
-      !instructorDing
+      !instructorDing ||
+      !dataAdmin
     ) {
       throw new Error("Failed to insert demo users");
     }
@@ -133,6 +141,7 @@ async function main(): Promise<void> {
       { userId: leader.id, role: "org_president" },
       { userId: leader.id, role: "org_officer" },
       { userId: league.id, role: "league_admin" },
+      { userId: dataAdmin.id, role: "league_admin" },
       { userId: instructor.id, role: "instructor" },
       { userId: studentAmy.id, role: "student" },
       { userId: studentAmy.id, role: "org_member" },
