@@ -3,7 +3,7 @@ import { db } from "db";
 import { abilityTags, awards, studentProfiles, volunteerRecords } from "db/schema";
 import {
   groupAbilityTags,
-  identityCompleteRow,
+  identityCompleteEffective,
   profileToJson,
   sumVolunteerHours,
 } from "../lib/archive-profile-format.js";
@@ -79,7 +79,7 @@ export async function fetchStudentArchiveDetail(userId: string) {
 
   return {
     profile: profileToJson(profile),
-    identityComplete: identityCompleteRow(profile),
+    identityComplete: identityCompleteEffective(profile),
     abilityTags: tags.map((t) => ({
       id: t.id,
       category: t.category,

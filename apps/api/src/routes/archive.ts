@@ -9,12 +9,20 @@ import {
   notifications,
   studentProfiles,
   studentVolunteerEventClaims,
+  users,
   volunteerRecords,
 } from "db/schema";
 import {
   BASIC_KEYS,
+  basicI18nDeepEqual,
+  IDENTITY_DRAFT_KEYS,
+  type IdentityDraft,
+  identityDraftFromProfileRow,
+  identityDraftsEqual,
   mergeBasicI18n,
+  normStudentNo,
   parseBasicI18n,
+  parseIdentityDraft,
   profileToJson,
   triPhoneEmailFromBasic,
 } from "../lib/archive-profile-format.js";
@@ -66,8 +74,8 @@ const patchMeSchema = z
     github: z.union([z.string(), z.null()]).optional(),
     weibo: z.union([z.string(), z.null()]).optional(),
     basicI18nDraft: basicI18nSchema.optional(),
-    studentNo: z.union([z.string().min(1), z.null()]).optional(),
-    volunteerNumber: z.union([z.string().min(1), z.null()]).optional(),
+    studentNo: z.union([z.string(), z.null()]).optional(),
+    volunteerNumber: z.union([z.string(), z.null()]).optional(),
     nationality: z.union([z.string(), z.null()]).optional(),
     idNumber: z.union([z.string(), z.null()]).optional(),
     grade: z.union([z.string(), z.null()]).optional(),
@@ -77,7 +85,16 @@ const patchMeSchema = z
     idPhotoUrl: z.union([z.string(), z.null()]).optional(),
     portraitUrl: z.union([z.string(), z.null()]).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.studentNo !== undefined && data.basicI18nDraft === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "studentNo must be submitted together with basicI18nDraft",
+        path: ["studentNo"],
+      });
+    }
+  });
 
 const volunteerClaimSchema = z
   .object({
@@ -90,6 +107,7 @@ const profileReviewSchema = z
   .object({
     action: z.enum(["approve", "reject"]),
     reason: z.string().optional(),
+    scope: z.enum(["profile_basic", "profile_identity"]).optional(),
   })
   .strict();
 
@@ -153,6 +171,25 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: "No fields to update" }, 400);
     }
 
+    const identityTouched = IDENTITY_DRAFT_KEYS.some((k) => data[k] !== undefined);
+    if (identityTouched) {
+      for (const k of IDENTITY_DRAFT_KEYS) {
+        if (data[k] === undefined) {
+          return c.json(
+            { error: "All identity fields are required to submit identity for review" },
+            400,
+          );
+        }
+      }
+    }
+
+    if (identityTouched && data.basicI18nDraft !== undefined) {
+      return c.json(
+        { error: "Submit basic and identity changes in separate requests" },
+        400,
+      );
+    }
+
     const updates: Record<string, unknown> = {};
 
     if (data.github !== undefined) {
@@ -161,35 +198,45 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     if (data.weibo !== undefined) {
       updates.weibo = data.weibo;
     }
-    if (data.studentNo !== undefined) {
-      updates.studentNo = data.studentNo;
-    }
-    if (data.volunteerNumber !== undefined) {
-      updates.volunteerNumber = data.volunteerNumber;
-    }
-    if (data.nationality !== undefined) {
-      updates.nationality = data.nationality;
-    }
-    if (data.idNumber !== undefined) {
-      updates.idNumber = data.idNumber;
-    }
-    if (data.grade !== undefined) {
-      updates.grade = data.grade;
-    }
-    if (data.department !== undefined) {
-      updates.department = data.department;
-    }
-    if (data.major !== undefined) {
-      updates.major = data.major;
-    }
-    if (data.className !== undefined) {
-      updates.className = data.className;
-    }
-    if (data.idPhotoUrl !== undefined) {
-      updates.idPhotoUrl = data.idPhotoUrl;
-    }
-    if (data.portraitUrl !== undefined) {
-      updates.portraitUrl = data.portraitUrl;
+
+    if (identityTouched) {
+      const urlOrNull = (v: unknown) => {
+        if (v === null) return null;
+        if (typeof v !== "string") return null;
+        const t = v.trim();
+        return t.length > 0 ? t : null;
+      };
+      const strReq = (v: unknown) => {
+        if (typeof v !== "string" || !v.trim()) {
+          throw new Error("invalid");
+        }
+        return v.trim();
+      };
+      try {
+        const draft: IdentityDraft = {
+          nationality: strReq(data.nationality),
+          idNumber: strReq(data.idNumber),
+          grade: strReq(data.grade),
+          department: strReq(data.department),
+          major: strReq(data.major),
+          className: strReq(data.className),
+          idPhotoUrl: urlOrNull(data.idPhotoUrl),
+          portraitUrl: urlOrNull(data.portraitUrl),
+          volunteerNumber: strReq(data.volunteerNumber),
+        };
+        if (!draft.idPhotoUrl?.trim() || !draft.portraitUrl?.trim()) {
+          return c.json({ error: "Identity photos and volunteer number are required" }, 400);
+        }
+        const publishedSnap = identityDraftFromProfileRow(existing);
+        if (identityDraftsEqual(draft, publishedSnap)) {
+          return c.json({ error: "No changes to submit for identity review" }, 400);
+        }
+        updates.identityDraft = draft;
+        updates.identityAuditStatus = "pending";
+        updates.identityAuditReason = null;
+      } catch {
+        return c.json({ error: "Invalid identity field values" }, 400);
+      }
     }
 
     if (data.basicI18nDraft !== undefined) {
@@ -202,9 +249,18 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
         const t = merged[k];
         if (t) draftObj[k] = t;
       }
+      const nextSnDraft =
+        data.studentNo !== undefined
+          ? normStudentNo(data.studentNo)
+          : normStudentNo(existing.studentNoDraft ?? existing.studentNo);
+      const publishedSn = normStudentNo(existing.studentNo);
+      if (basicI18nDeepEqual(merged, published) && nextSnDraft === publishedSn) {
+        return c.json({ error: "No changes to submit for basic information review" }, 400);
+      }
       updates.basicI18nDraft = draftObj;
       updates.basicAuditStatus = "pending";
       updates.basicAuditReason = null;
+      updates.studentNoDraft = nextSnDraft;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -323,7 +379,8 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
     }
 
-    const { action, reason } = parsed.data;
+    const { action, reason, scope: scopeRaw } = parsed.data;
+    const scope = scopeRaw ?? "profile_basic";
     if (action === "reject" && (reason === undefined || reason.trim() === "")) {
       return c.json({ error: "reason is required when rejecting" }, 400);
     }
@@ -340,10 +397,21 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: "Student profile not found" }, 404);
     }
 
-    const basicPending = profile.basicAuditStatus === "pending";
+    if (scope === "profile_basic") {
+      if (profile.basicAuditStatus !== "pending") {
+        return c.json({ error: "No pending basic profile change to review" }, 409);
+      }
+    } else {
+      if (profile.identityAuditStatus !== "pending") {
+        return c.json({ error: "No pending identity change to review" }, 409);
+      }
+    }
 
-    if (!basicPending) {
-      return c.json({ error: "No pending profile change to review" }, 409);
+    if (scope === "profile_identity" && action === "approve") {
+      const idOk = parseIdentityDraft(profile.identityDraft);
+      if (!idOk) {
+        return c.json({ error: "Invalid identity draft" }, 400);
+      }
     }
 
     const decidedAt = new Date();
@@ -351,34 +419,78 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     const notificationsOut: (typeof notifications.$inferSelect)[] = [];
 
     await db.transaction(async (tx) => {
-      if (action === "approve") {
-        const draftParsed =
-          profile.basicI18nDraft === null
-            ? parseBasicI18n(profile.basicI18nPublished)
-            : parseBasicI18n(profile.basicI18nDraft);
-        const draftObj: Record<string, { zh?: string; en?: string; ru?: string }> = {};
-        for (const k of BASIC_KEYS) {
-          const t = draftParsed[k];
-          if (t) draftObj[k] = t;
+      if (scope === "profile_basic") {
+        if (action === "approve") {
+          const draftParsed =
+            profile.basicI18nDraft === null
+              ? parseBasicI18n(profile.basicI18nPublished)
+              : parseBasicI18n(profile.basicI18nDraft);
+          const draftObj: Record<string, { zh?: string; en?: string; ru?: string }> = {};
+          for (const k of BASIC_KEYS) {
+            const t = draftParsed[k];
+            if (t) draftObj[k] = t;
+          }
+          const { phone: pubPhone, wechat: pubWechat } = triPhoneEmailFromBasic(draftParsed);
+          const nextStudentNo =
+            normStudentNo(profile.studentNoDraft) ?? profile.studentNo;
+          const displayPick =
+            draftParsed.name?.zh?.trim() ||
+            draftParsed.name?.en?.trim() ||
+            draftParsed.name?.ru?.trim() ||
+            null;
+          await tx
+            .update(studentProfiles)
+            .set({
+              basicI18nPublished: draftObj,
+              basicI18nDraft: null,
+              basicAuditStatus: "approved",
+              basicAuditReason: null,
+              phone: pubPhone ?? profile.phone,
+              wechat: pubWechat ?? profile.wechat,
+              studentNo: nextStudentNo,
+              studentNoDraft: null,
+            })
+            .where(eq(studentProfiles.userId, targetUserId));
+          if (displayPick) {
+            await tx
+              .update(users)
+              .set({ displayName: displayPick })
+              .where(eq(users.id, targetUserId));
+          }
+        } else {
+          await tx
+            .update(studentProfiles)
+            .set({
+              basicAuditStatus: "rejected",
+              basicAuditReason: reason!.trim(),
+            })
+            .where(eq(studentProfiles.userId, targetUserId));
         }
-        const { phone: pubPhone, wechat: pubWechat } = triPhoneEmailFromBasic(draftParsed);
+      } else if (action === "approve") {
+        const id = parseIdentityDraft(profile.identityDraft)!;
         await tx
           .update(studentProfiles)
           .set({
-            basicI18nPublished: draftObj,
-            basicI18nDraft: null,
-            basicAuditStatus: "approved",
-            basicAuditReason: null,
-            phone: pubPhone ?? profile.phone,
-            wechat: pubWechat ?? profile.wechat,
+            nationality: id.nationality,
+            idNumber: id.idNumber,
+            grade: id.grade,
+            department: id.department,
+            major: id.major,
+            className: id.className,
+            idPhotoUrl: id.idPhotoUrl,
+            portraitUrl: id.portraitUrl,
+            volunteerNumber: id.volunteerNumber,
+            identityDraft: null,
+            identityAuditStatus: "approved",
+            identityAuditReason: null,
           })
           .where(eq(studentProfiles.userId, targetUserId));
       } else {
         await tx
           .update(studentProfiles)
           .set({
-            basicAuditStatus: "rejected",
-            basicAuditReason: reason!.trim(),
+            identityAuditStatus: "rejected",
+            identityAuditReason: reason!.trim(),
           })
           .where(eq(studentProfiles.userId, targetUserId));
       }
@@ -389,7 +501,7 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
           userId: targetUserId,
           type: "archive_audit",
           payloadJson: JSON.stringify({
-            scope: "profile_basic",
+            scope,
             action,
             reason: action === "reject" ? reason!.trim() : null,
             reviewerUserId: reviewerId,
@@ -402,6 +514,10 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
 
     for (const n of notificationsOut) {
       broadcastNotification(n);
+    }
+
+    if (scope === "profile_identity" && action === "approve") {
+      await syncVolunteerRecordsForUser(targetUserId);
     }
 
     const [updated] = await db

@@ -221,6 +221,10 @@ export const studentProfiles = pgTable(
     profileAuditStatus: text("profile_audit_status").notNull().default("none"),
     profileAuditReason: text("profile_audit_reason"),
     studentNo: text("student_no"),
+    studentNoDraft: text("student_no_draft"),
+    identityDraft: jsonb("identity_draft"),
+    identityAuditStatus: text("identity_audit_status").notNull().default("none"),
+    identityAuditReason: text("identity_audit_reason"),
     basicI18nPublished: jsonb("basic_i18n_published")
       .notNull()
       .default(sql`'{}'::jsonb`),

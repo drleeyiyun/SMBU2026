@@ -19,6 +19,7 @@ type RosterRow = {
   major: string | null;
   grade: string | null;
   basicAuditStatus: string;
+  identityAuditStatus: string;
   profileAuditStatus: string;
 };
 
@@ -27,12 +28,34 @@ type PendingRow = {
   displayName: string | null;
   email: string;
   studentNo: string | null;
+  studentNoDraft: string | null;
   department: string | null;
   major: string | null;
   grade: string | null;
   basicAuditStatus: string;
   basicI18nPublished: BasicI18n;
   basicI18nDraft: BasicI18n | null;
+};
+
+type IdentitySnap = {
+  nationality: string;
+  idNumber: string;
+  grade: string;
+  department: string;
+  major: string;
+  className: string;
+  idPhotoUrl: string | null;
+  portraitUrl: string | null;
+  volunteerNumber: string;
+};
+
+type PendingIdentityRow = {
+  userId: string;
+  displayName: string | null;
+  email: string;
+  studentNo: string | null;
+  identityPublished: IdentitySnap;
+  identityDraft: IdentitySnap | null;
 };
 
 type PendingAwardRow = {
@@ -55,11 +78,24 @@ type AuditRow = {
 
 type DetailUser = { id: string; email: string; displayName: string | null };
 
+type AwardDetail = {
+  id: string;
+  title: string;
+  proofUrl: string | null;
+  status: string;
+  reason: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+};
+
+type AbilityCategory = "technical" | "planning" | "management" | "sports";
+
 type ArchiveDetail = {
   user: DetailUser;
   profile: {
     userId: string;
     studentNo: string | null;
+    studentNoDraft: string | null;
     volunteerNumber: string | null;
     nationality: string | null;
     idNumber: string | null;
@@ -74,13 +110,30 @@ type ArchiveDetail = {
     github: string | null;
     weibo: string | null;
     basicAuditStatus: string;
+    basicAuditReason: string | null;
     basicI18nPublished: BasicI18n;
     basicI18nDraft: BasicI18n | null;
+    identityDraft: IdentitySnap | null;
+    identityAuditStatus: string;
+    identityAuditReason: string | null;
   };
   identityComplete: boolean;
   abilityTags: { id: string; category: string; label: string }[];
-  awards: { id: string; title: string; status: string }[];
-  volunteerSummary: { totalHours: number };
+  abilityTagsByCategory: Record<AbilityCategory, { id: string; label: string }[]>;
+  awards: AwardDetail[];
+  myAwards: AwardDetail[];
+  publicAwards: AwardDetail[];
+  volunteerSummary: {
+    totalHours: number;
+    records: {
+      id: string;
+      title: string;
+      hours: number;
+      source: string;
+      externalRef: string | null;
+      occurredAt: string;
+    }[];
+  };
 };
 
 function basicDiffRows(published: BasicI18n, draft: BasicI18n | null): { field: string; loc: string; before: string; after: string }[] {
@@ -98,6 +151,32 @@ function basicDiffRows(published: BasicI18n, draft: BasicI18n | null): { field: 
   return out;
 }
 
+const IDENTITY_DIFF_KEYS = [
+  "nationality",
+  "idNumber",
+  "grade",
+  "department",
+  "major",
+  "className",
+  "idPhotoUrl",
+  "portraitUrl",
+  "volunteerNumber",
+] as const;
+
+function identityDiffRows(
+  before: IdentitySnap,
+  after: IdentitySnap | null,
+): { key: (typeof IDENTITY_DIFF_KEYS)[number]; before: string; after: string }[] {
+  if (!after) return [];
+  const out: { key: (typeof IDENTITY_DIFF_KEYS)[number]; before: string; after: string }[] = [];
+  for (const k of IDENTITY_DIFF_KEYS) {
+    const b = before[k] == null || before[k] === "" ? "—" : String(before[k]);
+    const a = after[k] == null || after[k] === "" ? "—" : String(after[k]);
+    if (b !== a) out.push({ key: k, before: b, after: a });
+  }
+  return out;
+}
+
 export default function LeagueArchivePage() {
   const { t } = useTranslation("common");
   const { user } = useSession();
@@ -106,9 +185,11 @@ export default function LeagueArchivePage() {
   const [roster, setRoster] = useState<RosterRow[]>([]);
   const [rosterQ, setRosterQ] = useState("");
   const [pending, setPending] = useState<PendingRow[]>([]);
+  const [pendingIdentity, setPendingIdentity] = useState<PendingIdentityRow[]>([]);
   const [audit, setAudit] = useState<AuditRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reasonByUser, setReasonByUser] = useState<Record<string, string>>({});
+  const [reasonIdentityByUser, setReasonIdentityByUser] = useState<Record<string, string>>({});
   const [reasonByAward, setReasonByAward] = useState<Record<string, string>>({});
   const [pendingAwards, setPendingAwards] = useState<PendingAwardRow[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -133,9 +214,10 @@ export default function LeagueArchivePage() {
     setError(null);
     const q = rosterQRef.current.trim();
     const qs = q ? `?q=${encodeURIComponent(q)}` : "";
-    const [rRes, pRes, awRes, aRes] = await Promise.all([
+    const [rRes, pRes, piRes, awRes, aRes] = await Promise.all([
       apiFetch(`/league/archive/students${qs}`),
       apiFetch("/league/archive/pending"),
+      apiFetch("/league/archive/pending-identity"),
       apiFetch("/league/archive/awards/pending"),
       apiFetch("/league/archive/audit-log?limit=30"),
     ]);
@@ -145,6 +227,10 @@ export default function LeagueArchivePage() {
     }
     if (!pRes.ok) {
       setError(await readErrorMessage(pRes));
+      return;
+    }
+    if (!piRes.ok) {
+      setError(await readErrorMessage(piRes));
       return;
     }
     if (!awRes.ok) {
@@ -157,10 +243,12 @@ export default function LeagueArchivePage() {
     }
     const rBody = await readJson<{ items: RosterRow[] }>(rRes);
     const pBody = await readJson<{ items: PendingRow[] }>(pRes);
+    const piBody = await readJson<{ items: PendingIdentityRow[] }>(piRes);
     const awBody = await readJson<{ items: PendingAwardRow[] }>(awRes);
     const aBody = await readJson<{ items: AuditRow[] }>(aRes);
     setRoster(rBody.items);
     setPending(pBody.items);
+    setPendingIdentity(piBody.items);
     setPendingAwards(awBody.items);
     setAudit(aBody.items);
   }, [allowed]);
@@ -185,22 +273,32 @@ export default function LeagueArchivePage() {
     }
   };
 
-  async function decide(userId: string, action: "approve" | "reject") {
+  async function decide(
+    userId: string,
+    action: "approve" | "reject",
+    scope: "profile_basic" | "profile_identity",
+  ) {
     setMsg(null);
-    const reason = reasonByUser[userId]?.trim() ?? "";
+    const reasonMap = scope === "profile_basic" ? reasonByUser : reasonIdentityByUser;
+    const setReasonMap = scope === "profile_basic" ? setReasonByUser : setReasonIdentityByUser;
+    const reason = reasonMap[userId]?.trim() ?? "";
     if (action === "reject" && !reason) {
       setMsg(t("leagueArchive.reason"));
       return;
     }
     const res = await apiFetch(`/archive/reviews/${userId}`, {
       method: "POST",
-      body: JSON.stringify({ action, reason: action === "reject" ? reason : undefined }),
+      body: JSON.stringify({
+        action,
+        scope,
+        reason: action === "reject" ? reason : undefined,
+      }),
     });
     if (!res.ok) {
       setMsg(await readErrorMessage(res));
       return;
     }
-    setReasonByUser((prev) => {
+    setReasonMap((prev) => {
       const next = { ...prev };
       delete next[userId];
       return next;
@@ -215,9 +313,15 @@ export default function LeagueArchivePage() {
     () =>
       ({
         profile_basic: t("leagueArchive.profileBasic"),
+        profile_identity: t("leagueArchive.profileIdentity"),
         profile: t("notifications.archiveContact"),
         award: t("notifications.archiveAward"),
       }) as Record<string, string>,
+    [t],
+  );
+
+  const identityFieldLabel = useCallback(
+    (k: string) => t(`archive.identityLabels.${k}` as "archive.identityLabels.nationality"),
     [t],
   );
 
@@ -367,6 +471,9 @@ export default function LeagueArchivePage() {
           <ul className="space-y-4">
             {pending.map((row) => {
               const rowsBasic = basicDiffRows(row.basicI18nPublished, row.basicI18nDraft);
+              const snPub = (row.studentNo ?? "").trim();
+              const snDr = (row.studentNoDraft ?? "").trim();
+              const studentNoChanged = snDr !== snPub;
               return (
                 <li
                   key={row.userId}
@@ -390,7 +497,7 @@ export default function LeagueArchivePage() {
 
                   <p className="mt-2 text-xs text-muted-foreground">{t("leagueArchive.profileBasic")}</p>
 
-                  {rowsBasic.length > 0 ? (
+                  {rowsBasic.length > 0 || studentNoChanged ? (
                     <div className="mt-3 rounded-md border border-border bg-muted/20 p-2">
                       <p className="mb-2 text-xs font-medium">{t("leagueArchive.basicDiff")}</p>
                       <div className="overflow-x-auto">
@@ -404,6 +511,14 @@ export default function LeagueArchivePage() {
                             </tr>
                           </thead>
                           <tbody>
+                            {studentNoChanged ? (
+                              <tr className="border-b border-border/60">
+                                <td className="p-1 whitespace-nowrap">{t("archive.studentNo")}</td>
+                                <td className="p-1 whitespace-nowrap">—</td>
+                                <td className="p-1 text-muted-foreground">{snPub || "—"}</td>
+                                <td className="p-1 font-medium">{snDr || "—"}</td>
+                              </tr>
+                            ) : null}
                             {rowsBasic.map((d) => (
                               <tr key={`${d.field}-${d.loc}`} className="border-b border-border/60">
                                 <td className="p-1 whitespace-nowrap">{fieldLabel(d.field)}</td>
@@ -429,14 +544,99 @@ export default function LeagueArchivePage() {
                     />
                     <button
                       type="button"
-                      onClick={() => void decide(row.userId, "approve")}
+                      onClick={() => void decide(row.userId, "approve", "profile_basic")}
                       className="rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground"
                     >
                       {t("leagueArchive.approve")}
                     </button>
                     <button
                       type="button"
-                      onClick={() => void decide(row.userId, "reject")}
+                      onClick={() => void decide(row.userId, "reject", "profile_basic")}
+                      className="rounded-md border border-destructive/50 px-3 py-2 font-medium text-destructive"
+                    >
+                      {t("leagueArchive.reject")}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-lg font-medium">{t("leagueArchive.pendingIdentity")}</h2>
+        {pendingIdentity.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("leagueArchive.noPendingIdentity")}</p>
+        ) : (
+          <ul className="space-y-4">
+            {pendingIdentity.map((row) => {
+              const idRows = identityDiffRows(row.identityPublished, row.identityDraft);
+              return (
+                <li
+                  key={row.userId}
+                  className="rounded-lg border border-border bg-card p-4 text-sm shadow-sm"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{row.displayName ?? row.userId}</p>
+                      <p className="text-muted-foreground">
+                        {row.studentNo ?? "—"} · {row.email}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-md border border-border px-2 py-1 text-xs"
+                      onClick={() => void openDetail(row.userId)}
+                    >
+                      {t("leagueArchive.viewDetail")}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{t("leagueArchive.profileIdentity")}</p>
+                  {idRows.length > 0 ? (
+                    <div className="mt-3 overflow-x-auto rounded-md border border-border bg-muted/20 p-2">
+                      <table className="w-full border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-border text-left text-muted-foreground">
+                            <th className="p-1">{t("leagueArchive.diffField")}</th>
+                            <th className="p-1">{t("leagueArchive.before")}</th>
+                            <th className="p-1">{t("leagueArchive.after")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {idRows.map((d) => (
+                            <tr key={d.key} className="border-b border-border/60">
+                              <td className="p-1 whitespace-nowrap">{identityFieldLabel(d.key)}</td>
+                              <td className="p-1 break-all text-muted-foreground">{d.before}</td>
+                              <td className="p-1 break-all font-medium">{d.after}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <input
+                      className="min-w-[200px] flex-1 rounded-md border border-border bg-background px-3 py-2"
+                      placeholder={t("leagueArchive.reason")}
+                      value={reasonIdentityByUser[row.userId] ?? ""}
+                      onChange={(e) =>
+                        setReasonIdentityByUser((prev) => ({
+                          ...prev,
+                          [row.userId]: e.target.value,
+                        }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void decide(row.userId, "approve", "profile_identity")}
+                      className="rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground"
+                    >
+                      {t("leagueArchive.approve")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void decide(row.userId, "reject", "profile_identity")}
                       className="rounded-md border border-destructive/50 px-3 py-2 font-medium text-destructive"
                     >
                       {t("leagueArchive.reject")}
@@ -507,7 +707,7 @@ export default function LeagueArchivePage() {
           onClick={() => setDetail(null)}
         >
           <div
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-lg"
+            className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between gap-2">
@@ -534,41 +734,158 @@ export default function LeagueArchivePage() {
                   </p>
                   <p className="mt-1">
                     {t("archive.studentNo")}: {detail.profile.studentNo ?? "—"}
+                    {detail.profile.studentNoDraft &&
+                    detail.profile.studentNoDraft !== detail.profile.studentNo ? (
+                      <span className="ml-2 text-xs text-amber-700 dark:text-amber-300">
+                        ({t("leagueArchive.pendingDraft")}: {detail.profile.studentNoDraft})
+                      </span>
+                    ) : null}
                   </p>
-                  <p className="text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
+                    {t("archive.basicAudit")}: {detail.profile.basicAuditStatus}
+                    {detail.profile.basicAuditReason
+                      ? ` — ${detail.profile.basicAuditReason}`
+                      : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("archive.identityAudit")}: {detail.profile.identityAuditStatus}
+                    {detail.profile.identityAuditReason
+                      ? ` — ${detail.profile.identityAuditReason}`
+                      : ""}
+                  </p>
+                  <p className="mt-1 text-muted-foreground">
                     {[detail.profile.grade, detail.profile.department, detail.profile.major]
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
-                </div>
-                <div className="rounded-lg border border-border p-3">
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">{t("archive.identity")}</p>
-                  <p>{detail.identityComplete ? t("archive.identityComplete") : t("archive.identityIncomplete")}</p>
+                  <p className="mt-1 text-xs">
+                    GitHub: {detail.profile.github ?? "—"} · Weibo: {detail.profile.weibo ?? "—"}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {[
-                      detail.profile.nationality,
-                      detail.profile.className,
-                      detail.profile.volunteerNumber,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {t("leagueArchive.phone")}: {detail.profile.phone ?? "—"} ·{" "}
+                    {t("leagueArchive.wechat")}: {detail.profile.wechat ?? "—"}
                   </p>
                 </div>
+
                 <div className="rounded-lg border border-border p-3">
-                  <p className="mb-2 font-medium">{t("archive.awardsPublic")}</p>
+                  <p className="mb-2 font-medium">{t("archive.basic")}</p>
+                  <div className="space-y-3 text-xs">
+                    {BASIC_KEYS.map((field) => (
+                      <div key={field}>
+                        <p className="mb-1 font-medium text-muted-foreground">{fieldLabel(field)}</p>
+                        <div className="grid gap-1 sm:grid-cols-3">
+                          {LOCALES.map((loc) => (
+                            <div key={loc}>
+                              <span className="text-muted-foreground">{loc}: </span>
+                              {detail.profile.basicI18nPublished[field]?.[loc] ?? "—"}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {detail.profile.basicI18nDraft ? (
+                    <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-200">
+                      {t("leagueArchive.basicDraftPending")}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border border-border p-3">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">{t("archive.identity")}</p>
+                  <p className="mb-2">
+                    {detail.identityComplete ? t("archive.identityComplete") : t("archive.identityIncomplete")}
+                  </p>
+                  <dl className="grid gap-1 text-xs sm:grid-cols-2">
+                    {IDENTITY_DIFF_KEYS.map((k) => (
+                      <div key={k} className="sm:col-span-2">
+                        <dt className="text-muted-foreground">{identityFieldLabel(k)}</dt>
+                        <dd className="break-all">
+                          {String(detail.profile[k] ?? "—")}
+                          {k === "idPhotoUrl" || k === "portraitUrl" ? (
+                            detail.profile[k] ? (
+                              <img
+                                src={detail.profile[k]!}
+                                alt=""
+                                className="mt-1 h-24 max-w-xs rounded border border-border object-contain"
+                              />
+                            ) : null
+                          ) : null}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {detail.profile.identityDraft ? (
+                    <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-200">
+                      {t("leagueArchive.identityDraftPending")}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border border-border p-3">
+                  <p className="mb-2 font-medium">{t("archive.tags")}</p>
                   <ul className="space-y-1 text-xs">
-                    {detail.awards.map((a) => (
-                      <li key={a.id}>
-                        {a.title} — {a.status}
+                    {detail.abilityTags.map((tag) => (
+                      <li key={tag.id}>
+                        {tag.category}: {tag.label}
                       </li>
                     ))}
                   </ul>
                 </div>
+
+                <div className="rounded-lg border border-border p-3">
+                  <p className="mb-2 font-medium">{t("leagueArchive.awardsAll")}</p>
+                  <ul className="space-y-2 text-xs">
+                    {detail.myAwards.map((a) => (
+                      <li key={a.id} className="border-b border-border/60 pb-2">
+                        <span className="font-medium">{a.title}</span> — {a.status}
+                        {a.proofUrl ? (
+                          <a
+                            href={a.proofUrl}
+                            className="ml-1 text-primary underline"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {t("archive.proofUrl")}
+                          </a>
+                        ) : null}
+                        {a.reason ? (
+                          <span className="mt-1 block text-muted-foreground">{a.reason}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
                 <div className="rounded-lg border border-border p-3">
                   <p className="font-medium">{t("archive.volunteer")}</p>
                   <p className="text-muted-foreground">
                     {t("archive.totalHours")}: {detail.volunteerSummary.totalHours}
                   </p>
+                  {detail.volunteerSummary.records.length > 0 ? (
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-border text-left text-muted-foreground">
+                            <th className="p-1">{t("archive.volunteer")}</th>
+                            <th className="p-1">{t("leagueArchive.volunteerHours")}</th>
+                            <th className="p-1">{t("leagueArchive.volunteerWhen")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detail.volunteerSummary.records.map((r) => (
+                            <tr key={r.id} className="border-b border-border/60">
+                              <td className="p-1">{r.title}</td>
+                              <td className="p-1">{r.hours}</td>
+                              <td className="p-1 whitespace-nowrap">
+                                {formatDisplayDateTime(r.occurredAt)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}

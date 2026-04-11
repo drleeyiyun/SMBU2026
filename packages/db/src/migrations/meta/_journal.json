@@ -43,6 +43,13 @@
       "when": 1775900000000,
       "tag": "0005_org_task_timeline_audience",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776000000000,
+      "tag": "0006_archive_identity_draft",
+      "breakpoints": true
     }
   ]
 }

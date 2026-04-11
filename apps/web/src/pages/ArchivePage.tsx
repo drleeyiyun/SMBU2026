@@ -8,9 +8,22 @@ type AbilityCategory = "technical" | "planning" | "management" | "sports";
 
 type LocaleTri = { zh?: string; en?: string; ru?: string };
 
+type IdentityDraftOut = {
+  nationality: string;
+  idNumber: string;
+  grade: string;
+  department: string;
+  major: string;
+  className: string;
+  idPhotoUrl: string | null;
+  portraitUrl: string | null;
+  volunteerNumber: string;
+};
+
 type ProfileOut = {
   userId: string;
   studentNo: string | null;
+  studentNoDraft: string | null;
   volunteerNumber: string;
   nationality: string;
   idNumber: string;
@@ -28,6 +41,9 @@ type ProfileOut = {
   basicI18nDraft: Record<string, LocaleTri> | null;
   basicAuditStatus: string;
   basicAuditReason: string | null;
+  identityDraft: IdentityDraftOut | null;
+  identityAuditStatus: string;
+  identityAuditReason: string | null;
 };
 
 type AwardRow = {
@@ -156,17 +172,30 @@ export default function ArchivePage() {
     const body = await readJson<ArchiveMe>(res);
     setData(body);
     setBasicForm(basicFromProfile(body.profile));
-    setStudentNo(body.profile.studentNo ?? "");
+    setStudentNo(body.profile.studentNoDraft ?? body.profile.studentNo ?? "");
+    const idSrc =
+      body.profile.identityDraft ??
+      ({
+        nationality: body.profile.nationality,
+        idNumber: body.profile.idNumber,
+        grade: body.profile.grade,
+        department: body.profile.department,
+        major: body.profile.major,
+        className: body.profile.className,
+        idPhotoUrl: body.profile.idPhotoUrl,
+        portraitUrl: body.profile.portraitUrl,
+        volunteerNumber: body.profile.volunteerNumber,
+      } satisfies IdentityDraftOut);
     setIdentity({
-      nationality: body.profile.nationality,
-      idNumber: body.profile.idNumber,
-      grade: body.profile.grade,
-      department: body.profile.department,
-      major: body.profile.major,
-      className: body.profile.className,
-      idPhotoUrl: body.profile.idPhotoUrl ?? "",
-      portraitUrl: body.profile.portraitUrl ?? "",
-      volunteerNumber: body.profile.volunteerNumber ?? "",
+      nationality: idSrc.nationality,
+      idNumber: idSrc.idNumber,
+      grade: idSrc.grade,
+      department: idSrc.department,
+      major: idSrc.major,
+      className: idSrc.className,
+      idPhotoUrl: idSrc.idPhotoUrl ?? "",
+      portraitUrl: idSrc.portraitUrl ?? "",
+      volunteerNumber: idSrc.volunteerNumber ?? "",
     });
     setIdentityErrors(new Set());
   }, []);
@@ -200,7 +229,7 @@ export default function ArchivePage() {
         const row = JSON.parse((ev as MessageEvent).data as string) as { payload?: unknown };
         const pl = row.payload as { scope?: string } | undefined;
         const s = pl?.scope;
-        if (s === "profile_basic" || s === "award") {
+        if (s === "profile_basic" || s === "profile_identity" || s === "award") {
           scheduleReload();
         }
       } catch {
@@ -240,26 +269,16 @@ export default function ArchivePage() {
     }
     const res = await apiFetch("/archive/me", {
       method: "PATCH",
-      body: JSON.stringify({ basicI18nDraft }),
+      body: JSON.stringify({
+        basicI18nDraft,
+        studentNo: studentNo.trim() || null,
+      }),
     });
     if (!res.ok) {
       setMsg(await readErrorMessage(res));
       return;
     }
-    setMsg(t("archive.saveBasic") + " — OK");
-    await load();
-  }
-
-  async function saveStudentNo() {
-    setMsg(null);
-    const res = await apiFetch("/archive/me", {
-      method: "PATCH",
-      body: JSON.stringify({ studentNo: studentNo.trim() || null }),
-    });
-    if (!res.ok) {
-      setMsg(await readErrorMessage(res));
-      return;
-    }
+    setMsg(t("archive.basicSubmitOk"));
     await load();
   }
 
@@ -290,7 +309,7 @@ export default function ArchivePage() {
       setMsg(await readErrorMessage(res));
       return;
     }
-    setMsg(t("archive.saveIdentity") + " — OK");
+    setMsg(t("archive.identitySubmitOk"));
     await load();
   }
 
@@ -460,7 +479,7 @@ export default function ArchivePage() {
           {data.profile.basicAuditReason ? ` — ${data.profile.basicAuditReason}` : ""}
         </p>
         <div className="mb-4 flex flex-wrap items-end gap-2">
-          <label className="flex min-w-[140px] flex-col gap-1 text-sm">
+          <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-sm">
             {t("archive.studentNo")}
             <input
               className={inputClass}
@@ -468,14 +487,8 @@ export default function ArchivePage() {
               onChange={(e) => setStudentNo(e.target.value)}
             />
           </label>
-          <button
-            type="button"
-            onClick={() => void saveStudentNo()}
-            className="rounded-md bg-secondary px-3 py-2 text-sm font-medium"
-          >
-            {t("plans.save")}
-          </button>
         </div>
+        <p className="mb-3 text-xs text-muted-foreground">{t("archive.studentNoWithBasicHint")}</p>
         <div className="space-y-4">
           {BASIC_FIELDS.map((field) => (
             <div key={field}>
@@ -505,12 +518,16 @@ export default function ArchivePage() {
           onClick={() => void saveBasicDraft()}
           className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
         >
-          {t("archive.saveBasic")}
+          {t("archive.submitBasicForReview")}
         </button>
       </section>
 
       <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
         <h2 className="mb-2 text-lg font-semibold">{t("archive.identity")}</h2>
+        <p className="mb-2 text-sm text-muted-foreground">
+          {t("archive.identityAudit")}: {data.profile.identityAuditStatus}
+          {data.profile.identityAuditReason ? ` — ${data.profile.identityAuditReason}` : ""}
+        </p>
         <p className="mb-3 text-sm text-muted-foreground">
           {data.identityComplete ? t("archive.identityComplete") : t("archive.identityIncomplete")}
         </p>
@@ -595,7 +612,7 @@ export default function ArchivePage() {
           onClick={() => void saveIdentity()}
           className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
         >
-          {t("archive.saveIdentity")}
+          {t("archive.submitIdentityForReview")}
         </button>
       </section>
 

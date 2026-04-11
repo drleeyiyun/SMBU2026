@@ -2,7 +2,11 @@ import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "db";
 import { awards, notifications, studentProfiles, users } from "db/schema";
-import { parseBasicI18n } from "../lib/archive-profile-format.js";
+import {
+  parseBasicI18n,
+  parseIdentityDraft,
+  resolveArchiveDisplayName,
+} from "../lib/archive-profile-format.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
@@ -37,6 +41,9 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
         major: studentProfiles.major,
         grade: studentProfiles.grade,
         basicAuditStatus: studentProfiles.basicAuditStatus,
+        basicI18nPublished: studentProfiles.basicI18nPublished,
+        basicI18nDraft: studentProfiles.basicI18nDraft,
+        identityAuditStatus: studentProfiles.identityAuditStatus,
         profileAuditStatus: studentProfiles.profileAuditStatus,
       })
       .from(studentProfiles)
@@ -44,7 +51,28 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
       .where(nameOrNo)
       .orderBy(asc(users.displayName));
 
-    return c.json({ items: rows });
+    const leagueNameOpts = { includePendingBasicDraft: false } as const;
+
+    return c.json({
+      items: rows.map((r) => ({
+        userId: r.userId,
+        displayName: resolveArchiveDisplayName(
+          r.displayName,
+          r.basicI18nPublished,
+          r.basicI18nDraft,
+          r.basicAuditStatus,
+          leagueNameOpts,
+        ),
+        email: r.email,
+        studentNo: r.studentNo,
+        department: r.department,
+        major: r.major,
+        grade: r.grade,
+        basicAuditStatus: r.basicAuditStatus,
+        identityAuditStatus: r.identityAuditStatus,
+        profileAuditStatus: r.profileAuditStatus,
+      })),
+    });
   })
   .get("/students/:userId", requireUser, requireRoles("league_admin"), async (c) => {
     const userId = c.req.param("userId");
@@ -71,11 +99,19 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: "Student profile not found" }, 404);
     }
 
+    const resolvedName = resolveArchiveDisplayName(
+      urow.displayName,
+      detail.profile.basicI18nPublished,
+      detail.profile.basicI18nDraft,
+      detail.profile.basicAuditStatus,
+      { includePendingBasicDraft: false },
+    );
+
     return c.json({
       user: {
         id: urow.id,
         email: urow.email,
-        displayName: urow.displayName,
+        displayName: resolvedName ?? urow.displayName,
       },
       ...detail,
     });
@@ -87,6 +123,7 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
         displayName: users.displayName,
         email: users.email,
         studentNo: studentProfiles.studentNo,
+        studentNoDraft: studentProfiles.studentNoDraft,
         department: studentProfiles.department,
         major: studentProfiles.major,
         grade: studentProfiles.grade,
@@ -100,11 +137,18 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
       .orderBy(asc(users.displayName));
 
     return c.json({
-      items: rows.map((r) => ({
+           items: rows.map((r) => ({
         userId: r.userId,
-        displayName: r.displayName,
+        displayName: resolveArchiveDisplayName(
+          r.displayName,
+          r.basicI18nPublished,
+          r.basicI18nDraft,
+          r.basicAuditStatus,
+          { includePendingBasicDraft: false },
+        ),
         email: r.email,
         studentNo: r.studentNo,
+        studentNoDraft: r.studentNoDraft,
         department: r.department,
         major: r.major,
         grade: r.grade,
@@ -112,6 +156,59 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
         basicI18nPublished: parseBasicI18n(r.basicI18nPublished),
         basicI18nDraft:
           r.basicI18nDraft === null ? null : parseBasicI18n(r.basicI18nDraft),
+      })),
+    });
+  })
+  .get("/pending-identity", requireUser, requireRoles("league_admin"), async (c) => {
+    const rows = await db
+      .select({
+        userId: studentProfiles.userId,
+        displayName: users.displayName,
+        email: users.email,
+        studentNo: studentProfiles.studentNo,
+        nationality: studentProfiles.nationality,
+        idNumber: studentProfiles.idNumber,
+        grade: studentProfiles.grade,
+        department: studentProfiles.department,
+        major: studentProfiles.major,
+        className: studentProfiles.className,
+        idPhotoUrl: studentProfiles.idPhotoUrl,
+        portraitUrl: studentProfiles.portraitUrl,
+        volunteerNumber: studentProfiles.volunteerNumber,
+        identityDraft: studentProfiles.identityDraft,
+        basicI18nPublished: studentProfiles.basicI18nPublished,
+        basicI18nDraft: studentProfiles.basicI18nDraft,
+        basicAuditStatus: studentProfiles.basicAuditStatus,
+      })
+      .from(studentProfiles)
+      .innerJoin(users, eq(studentProfiles.userId, users.id))
+      .where(eq(studentProfiles.identityAuditStatus, "pending"))
+      .orderBy(asc(users.displayName));
+
+    return c.json({
+      items: rows.map((r) => ({
+        userId: r.userId,
+        displayName: resolveArchiveDisplayName(
+          r.displayName,
+          r.basicI18nPublished,
+          r.basicI18nDraft,
+          r.basicAuditStatus,
+          { includePendingBasicDraft: false },
+        ),
+        email: r.email,
+        studentNo: r.studentNo,
+        identityPublished: {
+          nationality: r.nationality,
+          idNumber: r.idNumber,
+          grade: r.grade,
+          department: r.department,
+          major: r.major,
+          className: r.className,
+          idPhotoUrl: r.idPhotoUrl && r.idPhotoUrl.trim() ? r.idPhotoUrl.trim() : null,
+          portraitUrl: r.portraitUrl && r.portraitUrl.trim() ? r.portraitUrl.trim() : null,
+          volunteerNumber: r.volunteerNumber,
+        },
+        identityDraft: parseIdentityDraft(r.identityDraft),
       })),
     });
   })
