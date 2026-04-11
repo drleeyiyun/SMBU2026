@@ -134,6 +134,12 @@ function getMetaLocation(meta: unknown): string | null {
   return typeof loc === "string" ? loc : null;
 }
 
+function getMetaInstructor(meta: unknown): string | null {
+  if (meta == null || typeof meta !== "object") return null;
+  const v = (meta as { instructor?: unknown }).instructor;
+  return typeof v === "string" ? v : null;
+}
+
 function getMetaCategory(meta: unknown): string | null {
   if (meta == null || typeof meta !== "object") return null;
   const c = (meta as { category?: unknown }).category;
@@ -184,6 +190,8 @@ function itemMatchesFilter(item: TimelineItem, filterText: string): boolean {
   if (item.title.toLowerCase().includes(q)) return true;
   const loc = getMetaLocation(item.meta);
   if (loc != null && loc.toLowerCase().includes(q)) return true;
+  const ins = getMetaInstructor(item.meta);
+  if (ins != null && ins.toLowerCase().includes(q)) return true;
   return false;
 }
 
@@ -561,6 +569,7 @@ export default function TimelinePage() {
     const cat = item.sourceType === "league_coordination" ? getMetaCategory(item.meta) : null;
     const orgTm = item.sourceType === "org_activity" ? getOrgActivityMeta(item.meta) : null;
     const loc = getMetaLocation(item.meta);
+    const instructor = item.sourceType === "schedule" ? getMetaInstructor(item.meta) : null;
     const planPri = item.sourceType === "plan" ? getPlanPriority(item.meta) : null;
     let badgeText: string;
     if (item.sourceType === "league_coordination" && cat != null) {
@@ -588,6 +597,11 @@ export default function TimelinePage() {
         {planPri != null ? (
           <div className="text-xs text-muted-foreground">
             {t("timeline.planPriorityLabel", { value: planPri })}
+          </div>
+        ) : null}
+        {instructor != null && instructor.length > 0 ? (
+          <div className="text-xs text-muted-foreground">
+            {t("timeline.scheduleInstructor", { name: instructor })}
           </div>
         ) : null}
         {loc != null && loc.length > 0 ? (

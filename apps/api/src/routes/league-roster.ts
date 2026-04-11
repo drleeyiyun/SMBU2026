@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
+import { isValidFacultyMajorPair, isValidStudentGrade } from "academic-catalog";
 import { db } from "db";
 import { studentProfiles, userRoles, users } from "db/schema";
 import { hashPassword } from "../lib/auth.js";
@@ -18,8 +19,8 @@ const rosterCreateSchema = z
     volunteerNumber: z.string().min(1).max(64).optional(),
     studentNo: z.union([z.string().min(1).max(64), z.null()]).optional(),
     grade: z.string().min(1).max(80).optional(),
-    department: z.string().min(1).max(120).optional(),
-    major: z.string().min(1).max(120).optional(),
+    department: z.string().max(120).optional(),
+    major: z.string().max(120).optional(),
     className: z.string().min(1).max(120).optional(),
     nationality: z.string().min(1).max(80).optional(),
   })
@@ -32,6 +33,29 @@ const rosterCreateSchema = z
           code: z.ZodIssueCode.custom,
           message: "volunteerNumber is required for students",
           path: ["volunteerNumber"],
+        });
+      }
+      const d = data.department?.trim();
+      const m = data.major?.trim();
+      if (!d) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "department is required for students",
+          path: ["department"],
+        });
+      }
+      if (!m) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "major is required for students",
+          path: ["major"],
+        });
+      }
+      if (d && m && !isValidFacultyMajorPair(d, m)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "department and major must match the school catalog",
+          path: ["major"],
         });
       }
     }
@@ -176,9 +200,9 @@ export const leagueRosterRouter = new Hono<{ Variables: AuthVariables }>()
 
     const idNumber = `ROSTER-${randomBytes(12).toString("hex")}`;
     const nat = (nationality ?? "中国").trim();
-    const gradeVal = (grade ?? "待定").trim();
-    const deptVal = (department ?? "待定").trim();
-    const majorVal = (major ?? "待定").trim();
+    const gradeVal = grade!.trim();
+    const deptVal = department!.trim();
+    const majorVal = major!.trim();
     const classVal = (className ?? "待定").trim();
 
     const [created] = await db

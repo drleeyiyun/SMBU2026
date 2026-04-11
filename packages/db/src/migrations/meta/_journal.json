@@ -50,6 +50,20 @@
       "when": 1776000000000,
       "tag": "0006_archive_identity_draft",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776100000000,
+      "tag": "0007_schedule_item_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776200000000,
+      "tag": "0008_schedule_instructor",
+      "breakpoints": true
     }
   ]
 }

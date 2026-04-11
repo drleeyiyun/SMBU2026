@@ -6,6 +6,7 @@ import { scheduleItemsCache } from "db/schema";
 import { loadEnv } from "../env.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
+import { SCHEDULE_SOURCE_SCHOOL } from "../lib/schedule-source.js";
 import { createSchoolGateway } from "../services/school-gateway.js";
 
 const isoOptional = z
@@ -77,7 +78,14 @@ export const scheduleRouter = new Hono<{ Variables: AuthVariables }>()
     const batchId = crypto.randomUUID();
     const fetchedAt = new Date();
 
-    await db.delete(scheduleItemsCache).where(eq(scheduleItemsCache.userId, userId));
+    await db
+      .delete(scheduleItemsCache)
+      .where(
+        and(
+          eq(scheduleItemsCache.userId, userId),
+          eq(scheduleItemsCache.scheduleSource, SCHEDULE_SOURCE_SCHOOL),
+        ),
+      );
 
     if (items.length > 0) {
       await db.insert(scheduleItemsCache).values(
@@ -85,10 +93,12 @@ export const scheduleRouter = new Hono<{ Variables: AuthVariables }>()
           userId,
           title: row.title,
           location: row.location,
+          instructor: null,
           startsAt: row.startsAt,
           endsAt: row.endsAt,
           batchId,
           fetchedAt,
+          scheduleSource: SCHEDULE_SOURCE_SCHOOL,
         })),
       );
     }
@@ -130,6 +140,7 @@ export const scheduleRouter = new Hono<{ Variables: AuthVariables }>()
         id: scheduleItemsCache.id,
         title: scheduleItemsCache.title,
         location: scheduleItemsCache.location,
+        instructor: scheduleItemsCache.instructor,
         startsAt: scheduleItemsCache.startsAt,
         endsAt: scheduleItemsCache.endsAt,
         batchId: scheduleItemsCache.batchId,
@@ -144,6 +155,7 @@ export const scheduleRouter = new Hono<{ Variables: AuthVariables }>()
         id: r.id,
         title: r.title,
         location: r.location,
+        instructor: r.instructor,
         startsAt: r.startsAt.toISOString(),
         endsAt: r.endsAt.toISOString(),
         batchId: r.batchId,

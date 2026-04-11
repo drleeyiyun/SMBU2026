@@ -312,10 +312,13 @@ export const scheduleItemsCache = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     location: text("location"),
+    instructor: text("instructor"),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
     batchId: text("batch_id"),
+    /** school_gateway: 教务同步；league_program: 团委按系别专业下发的课表。 */
+    scheduleSource: text("schedule_source").notNull().default("school_gateway"),
   },
   (t) => [index("schedule_user_starts_idx").on(t.userId, t.startsAt)]
 );

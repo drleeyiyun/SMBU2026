@@ -12,9 +12,10 @@ export default defineConfig({
   dts: true,
   // Workspace `db` exports `.ts` sources; bundle so `node dist/index.js` does not
   // need Node to load TypeScript from `node_modules/db`.
-  noExternal: ["db"],
+  noExternal: ["db", "academic-catalog"],
   alias: {
     db: path.join(dir, "../../packages/db/src/client.ts"),
     "db/schema": path.join(dir, "../../packages/db/src/schema.ts"),
+    "academic-catalog": path.join(dir, "../../packages/academic-catalog/src/index.ts"),
   },
 });

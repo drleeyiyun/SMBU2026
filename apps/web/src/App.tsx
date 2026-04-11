@@ -5,6 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import LeagueArchivePage from "./pages/LeagueArchivePage";
 import LeagueCoordinationPage from "./pages/LeagueCoordinationPage";
 import OrgManagePage from "./pages/OrgManagePage";
+import ProgramScheduleAdminPage from "./pages/ProgramScheduleAdminPage";
 import RosterAdminPage from "./pages/RosterAdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import OaPage from "./pages/OaPage";
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="league/archive" element={<LeagueArchivePage />} />
         <Route path="league/coordination" element={<LeagueCoordinationPage />} />
         <Route path="league/roster" element={<RosterAdminPage />} />
+        <Route path="league/program-schedule" element={<ProgramScheduleAdminPage />} />
         <Route path="league/orgs" element={<OrgManagePage />} />
         <Route path="oa" element={<OaPage />} />
         <Route path="notifications" element={<NotificationsPage />} />

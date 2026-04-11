@@ -4,6 +4,7 @@ export type TimelineScheduleInput = {
   startsAt: Date;
   endsAt: Date;
   location?: string | null;
+  instructor?: string | null;
 };
 
 export type TimelinePlanInput = {
@@ -67,14 +68,20 @@ export function mergeTimelineSources(input: MergeTimelineSourcesInput): MergedTi
   const items: MergedTimelineItem[] = [];
 
   for (const s of input.schedule) {
+    const meta: Record<string, unknown> = {};
+    if (s.location != null && String(s.location).length > 0) {
+      meta.location = s.location;
+    }
+    if (s.instructor != null && String(s.instructor).length > 0) {
+      meta.instructor = s.instructor;
+    }
     items.push({
       sourceType: "schedule",
       sourceId: s.id,
       title: s.title,
       startsAt: s.startsAt,
       endsAt: s.endsAt,
-      meta:
-        s.location != null && String(s.location).length > 0 ? { location: s.location } : undefined,
+      meta: Object.keys(meta).length > 0 ? meta : undefined,
     });
   }
 

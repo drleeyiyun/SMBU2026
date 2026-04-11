@@ -46,6 +46,9 @@ export default function AppLayout() {
                 <NavLink to="/app/league/roster" className={linkClass}>
                   {t("nav.rosterAdmin")}
                 </NavLink>
+                <NavLink to="/app/league/program-schedule" className={linkClass}>
+                  {t("nav.leagueProgramSchedule")}
+                </NavLink>
               </>
             ) : null}
             {showOrgManage ? (

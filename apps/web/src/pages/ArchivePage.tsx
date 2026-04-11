@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { AcademicDeptMajorSelects } from "../components/AcademicDeptMajorSelects";
+import { StudentGradeSelect } from "../components/StudentGradeSelect";
+import { normalizeDepartmentMajorSelection, normalizeStudentGradeSelection } from "academic-catalog";
 import { apiBase, apiFetch, readErrorMessage, readJson } from "../lib/api";
 import { uploadImageFile } from "../lib/upload-image";
 import { formatDisplayDateTime } from "../lib/format-date";
@@ -186,12 +189,14 @@ export default function ArchivePage() {
         portraitUrl: body.profile.portraitUrl,
         volunteerNumber: body.profile.volunteerNumber,
       } satisfies IdentityDraftOut);
+    const dm = normalizeDepartmentMajorSelection(idSrc.department, idSrc.major);
+    const gNorm = normalizeStudentGradeSelection(idSrc.grade);
     setIdentity({
       nationality: idSrc.nationality,
       idNumber: idSrc.idNumber,
-      grade: idSrc.grade,
-      department: idSrc.department,
-      major: idSrc.major,
+      grade: gNorm,
+      department: dm.department,
+      major: dm.major,
       className: idSrc.className,
       idPhotoUrl: idSrc.idPhotoUrl ?? "",
       portraitUrl: idSrc.portraitUrl ?? "",
@@ -532,7 +537,26 @@ export default function ArchivePage() {
           {data.identityComplete ? t("archive.identityComplete") : t("archive.identityIncomplete")}
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          {IDENTITY_FIELDS.map((key) => {
+          <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+            <AcademicDeptMajorSelects
+              department={identity.department}
+              major={identity.major}
+              onDepartmentChange={(d) => patchIdentity("department", d)}
+              onMajorChange={(m) => patchIdentity("major", m)}
+              departmentInvalid={identityErrors.has("department")}
+              majorInvalid={identityErrors.has("major")}
+            />
+          </div>
+          <StudentGradeSelect
+            value={identity.grade}
+            onChange={(g) => patchIdentity("grade", g)}
+            invalid={identityErrors.has("grade")}
+            required
+            labelMode="archive"
+          />
+          {IDENTITY_FIELDS.filter(
+            (key) => key !== "department" && key !== "major" && key !== "grade",
+          ).map((key) => {
             const val = identity[key];
             const err = identityErrors.has(key);
             if (key === "idPhotoUrl" || key === "portraitUrl") {

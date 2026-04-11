@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AcademicDeptMajorSelects } from "../components/AcademicDeptMajorSelects";
+import { StudentGradeSelect } from "../components/StudentGradeSelect";
 import { apiFetch, readErrorMessage, readJson } from "../lib/api";
 import { formatDisplayDateTime } from "../lib/format-date";
 
@@ -115,13 +117,21 @@ export default function RosterAdminPage() {
 
       <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
         <h2 className="mb-3 text-sm font-medium">{t("rosterAdmin.formTitle")}</h2>
-        <div className="grid max-w-lg gap-3">
+        <div className="grid max-w-xl gap-3">
           <label className="text-xs text-muted-foreground">
             {t("rosterAdmin.role")}
             <select
               className={`${inputClass} mt-1`}
               value={role}
-              onChange={(e) => setRole(e.target.value as "student" | "instructor")}
+              onChange={(e) => {
+                const r = e.target.value as "student" | "instructor";
+                setRole(r);
+                if (r === "instructor") {
+                  setGrade("");
+                  setDepartment("");
+                  setMajor("");
+                }
+              }}
             >
               <option value="instructor">{t("rosterAdmin.roleInstructor")}</option>
               <option value="student">{t("rosterAdmin.roleStudent")}</option>
@@ -170,18 +180,21 @@ export default function RosterAdminPage() {
                 {t("rosterAdmin.nationality")}
                 <input className={`${inputClass} mt-1`} value={nationality} onChange={(e) => setNationality(e.target.value)} />
               </label>
-              <label className="text-xs text-muted-foreground">
-                {t("rosterAdmin.grade")}
-                <input className={`${inputClass} mt-1`} value={grade} onChange={(e) => setGrade(e.target.value)} />
-              </label>
-              <label className="text-xs text-muted-foreground">
-                {t("rosterAdmin.department")}
-                <input className={`${inputClass} mt-1`} value={department} onChange={(e) => setDepartment(e.target.value)} />
-              </label>
-              <label className="text-xs text-muted-foreground">
-                {t("rosterAdmin.major")}
-                <input className={`${inputClass} mt-1`} value={major} onChange={(e) => setMajor(e.target.value)} />
-              </label>
+              <StudentGradeSelect
+                value={grade}
+                onChange={setGrade}
+                required
+                labelMode="roster"
+                className="text-xs text-muted-foreground"
+              />
+              <div className="grid gap-3 sm:grid-cols-2 sm:col-span-2">
+                <AcademicDeptMajorSelects
+                  department={department}
+                  major={major}
+                  onDepartmentChange={setDepartment}
+                  onMajorChange={setMajor}
+                />
+              </div>
               <label className="text-xs text-muted-foreground">
                 {t("rosterAdmin.className")}
                 <input className={`${inputClass} mt-1`} value={className} onChange={(e) => setClassName(e.target.value)} />

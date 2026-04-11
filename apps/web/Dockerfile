@@ -9,10 +9,12 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/
+COPY packages/academic-catalog/package.json ./packages/academic-catalog/
 
 RUN pnpm install --frozen-lockfile
 
 COPY apps/web ./apps/web
+COPY packages/academic-catalog ./packages/academic-catalog
 
 # Empty VITE_API_URL → same-origin; nginx proxies API paths to backend
 ENV VITE_API_URL=

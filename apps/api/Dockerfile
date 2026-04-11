@@ -8,6 +8,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/
 COPY packages/db/package.json ./packages/db/
+COPY packages/academic-catalog/package.json ./packages/academic-catalog/
 
 RUN pnpm install --frozen-lockfile
 
@@ -15,6 +16,7 @@ FROM deps AS build
 COPY tsconfig.base.json ./
 COPY apps/api ./apps/api
 COPY packages/db ./packages/db
+COPY packages/academic-catalog ./packages/academic-catalog
 
 RUN pnpm --filter api build
 

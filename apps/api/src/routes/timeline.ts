@@ -88,6 +88,7 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
             id: scheduleItemsCache.id,
             title: scheduleItemsCache.title,
             location: scheduleItemsCache.location,
+            instructor: scheduleItemsCache.instructor,
             startsAt: scheduleItemsCache.startsAt,
             endsAt: scheduleItemsCache.endsAt,
           })
@@ -278,6 +279,7 @@ export const timelineRouter = new Hono<{ Variables: AuthVariables }>().get(
         startsAt: r.startsAt,
         endsAt: r.endsAt,
         location: r.location,
+        instructor: r.instructor,
       })),
       plans: planRows.map((r) => ({
         id: r.id,

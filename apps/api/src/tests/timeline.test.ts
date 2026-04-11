@@ -31,6 +31,25 @@ describe("mergeTimelineSources", () => {
     expect(row.meta).toEqual({ location: "Hall A" });
   });
 
+  it("includes instructor in schedule meta when provided", () => {
+    const merged = mergeTimelineSources({
+      schedule: [
+        {
+          id: "s2",
+          title: "Math",
+          startsAt: new Date("2026-04-02T10:00:00.000Z"),
+          endsAt: new Date("2026-04-02T11:00:00.000Z"),
+          location: "A101",
+          instructor: "Zhang",
+        },
+      ],
+      plans: [],
+      orgTasks: [],
+      leagueCoordination: [],
+    });
+    expect(merged[0]!.meta).toEqual({ location: "A101", instructor: "Zhang" });
+  });
+
   it("includes plan priority in meta", () => {
     const merged = mergeTimelineSources({
       schedule: [],

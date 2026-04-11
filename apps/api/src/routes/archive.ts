@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
+import { isValidFacultyMajorPair, isValidStudentGrade } from "academic-catalog";
 import { db } from "db";
 import {
   abilityTags,
@@ -227,6 +228,9 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
         if (!draft.idPhotoUrl?.trim() || !draft.portraitUrl?.trim()) {
           return c.json({ error: "Identity photos and volunteer number are required" }, 400);
         }
+        if (!isValidFacultyMajorPair(draft.department, draft.major)) {
+          return c.json({ error: "系别与专业必须从学校目录中选择" }, 400);
+        }
         const publishedSnap = identityDraftFromProfileRow(existing);
         if (identityDraftsEqual(draft, publishedSnap)) {
           return c.json({ error: "No changes to submit for identity review" }, 400);
@@ -408,9 +412,15 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     }
 
     if (scope === "profile_identity" && action === "approve") {
-      const idOk = parseIdentityDraft(profile.identityDraft);
-      if (!idOk) {
+      const idDraft = parseIdentityDraft(profile.identityDraft);
+      if (!idDraft) {
         return c.json({ error: "Invalid identity draft" }, 400);
+      }
+      if (!isValidFacultyMajorPair(idDraft.department, idDraft.major)) {
+        return c.json({ error: "系别与专业必须从学校目录中选择" }, 400);
+      }
+      if (!isValidStudentGrade(idDraft.grade)) {
+        return c.json({ error: "年级必须从学校目录中选择" }, 400);
       }
     }
 
