@@ -13,7 +13,7 @@
 
 ```bash
 git clone https://github.com/drleeyiyun/SMBU2026.git
-cd campus-platform
+cd SMBU2026
 cp .env.example .env
 docker compose up -d --build
 ```
