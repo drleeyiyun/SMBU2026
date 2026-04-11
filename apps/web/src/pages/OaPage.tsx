@@ -8,6 +8,8 @@ type TaskRow = {
   assignment: {
     id: string;
     taskId?: string;
+    assigneeUserId?: string | null;
+    assigneeDisplayName?: string | null;
     status: string;
     updatedAt: string;
   };
@@ -25,6 +27,19 @@ type TaskRow = {
 };
 
 type OrgListItem = { id: string; nameShort: string };
+
+type CoordinationItem = {
+  task: TaskRow["task"];
+  primaryOrgNameShort: string | null;
+  involvedOrgIds: string[];
+  assignments: Array<{
+    id: string;
+    assigneeUserId: string;
+    assigneeDisplayName: string | null;
+    status: string;
+    updatedAt: string;
+  }>;
+};
 
 type TimelineEvent =
   | {
@@ -57,9 +72,12 @@ export default function OaPage() {
   const { t } = useTranslation();
   const { user } = useSession();
   const isLeagueAdmin = user?.roles.includes("league_admin") ?? false;
+  const canCoordination =
+    !!(user?.roles.includes("org_president") || user?.roles.includes("org_officer"));
   const [tab, setTab] = useState<"mine" | "overview">("mine");
 
   const [mine, setMine] = useState<TaskRow[]>([]);
+  const [coordination, setCoordination] = useState<CoordinationItem[]>([]);
   const [overview, setOverview] = useState<TaskRow[]>([]);
   const [byStatus, setByStatus] = useState<Record<string, number> | null>(null);
   const [byKind, setByKind] = useState<Record<string, number> | null>(null);
@@ -82,6 +100,13 @@ export default function OaPage() {
   const debounceRef = useRef<number | null>(null);
   const pollRef = useRef<number | null>(null);
   const esRef = useRef<EventSource | null>(null);
+  const coordSearchTimer = useRef<number | null>(null);
+
+  const [coordAddingForTaskId, setCoordAddingForTaskId] = useState<string | null>(null);
+  const [coordStudentQ, setCoordStudentQ] = useState("");
+  const [coordStudentHits, setCoordStudentHits] = useState<
+    Array<{ id: string; displayName: string; email: string }>
+  >([]);
 
   const loadMine = useCallback(async () => {
     const res = await apiFetch("/tasks/mine");
@@ -91,6 +116,17 @@ export default function OaPage() {
     }
     const body = await readJson<{ items: TaskRow[] }>(res);
     setMine(body.items);
+    setError(null);
+  }, []);
+
+  const loadCoordination = useCallback(async () => {
+    const res = await apiFetch("/tasks/coordination");
+    if (!res.ok) {
+      setError(await readErrorMessage(res));
+      return;
+    }
+    const body = await readJson<{ items: CoordinationItem[] }>(res);
+    setCoordination(body.items);
     setError(null);
   }, []);
 
@@ -131,11 +167,13 @@ export default function OaPage() {
     debounceRef.current = window.setTimeout(() => {
       debounceRef.current = null;
       void (async () => {
-        if (tab === "mine") await loadMine();
-        else if (isLeagueAdmin) await loadOverview();
+        if (tab === "mine") {
+          await loadMine();
+          if (canCoordination) await loadCoordination();
+        } else if (isLeagueAdmin) await loadOverview();
       })();
     }, 300);
-  }, [tab, isLeagueAdmin, loadMine, loadOverview]);
+  }, [tab, isLeagueAdmin, canCoordination, loadMine, loadCoordination, loadOverview]);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,6 +183,7 @@ export default function OaPage() {
       try {
         if (tab === "mine") {
           await loadMine();
+          if (canCoordination) await loadCoordination();
         } else if (isLeagueAdmin) {
           await loadOverview();
         }
@@ -155,7 +194,7 @@ export default function OaPage() {
     return () => {
       cancelled = true;
     };
-  }, [tab, isLeagueAdmin, loadMine, loadOverview]);
+  }, [tab, isLeagueAdmin, canCoordination, loadMine, loadCoordination, loadOverview]);
 
   useEffect(() => {
     if (isLeagueAdmin) void loadLeagueOrgs();
@@ -204,6 +243,41 @@ export default function OaPage() {
     };
   }, [scheduleReload]);
 
+  useEffect(() => {
+    if (!coordAddingForTaskId) return;
+    if (coordSearchTimer.current != null) window.clearTimeout(coordSearchTimer.current);
+    coordSearchTimer.current = window.setTimeout(() => {
+      coordSearchTimer.current = null;
+      void (async () => {
+        const res = await apiFetch(
+          `/directory/students?browse=1&q=${encodeURIComponent(coordStudentQ)}&limit=50`,
+        );
+        if (!res.ok) return;
+        const body = await readJson<{
+          users: Array<{ id: string; displayName: string; email: string }>;
+        }>(res);
+        setCoordStudentHits(body.users);
+      })();
+    }, 280);
+    return () => {
+      if (coordSearchTimer.current != null) window.clearTimeout(coordSearchTimer.current);
+    };
+  }, [coordStudentQ, coordAddingForTaskId]);
+
+  const addCoordAssignee = async (taskId: string, userId: string) => {
+    const res = await apiFetch(`/tasks/${taskId}/assignments`, {
+      method: "POST",
+      body: JSON.stringify({ assigneeUserIds: [userId] }),
+    });
+    if (!res.ok) {
+      setError(await readErrorMessage(res));
+      return;
+    }
+    setCoordAddingForTaskId(null);
+    setCoordStudentQ("");
+    scheduleReload();
+  };
+
   const loadTimeline = async (taskId: string) => {
     setLoadingTimeline(taskId);
     try {
@@ -229,6 +303,7 @@ export default function OaPage() {
   };
 
   const advanceAssignment = async (assignmentId: string, taskId: string, status: string) => {
+    if (assignmentId.startsWith("unassigned:")) return;
     const next = nextStatus(status);
     if (!next) return;
     const res = await apiFetch(`/tasks/assignments/${assignmentId}/status`, {
@@ -243,7 +318,7 @@ export default function OaPage() {
     if (timelines[taskId]) void loadTimeline(taskId);
   };
 
-  const items = tab === "mine" ? mine : overview;
+  const overviewItems = overview;
   const statusLabel = (s: string) => t(`oa.status.${s}`, { defaultValue: s });
 
   const kindLabel = (k: string) => t(`oa.taskKind.${k}`, { defaultValue: k });
@@ -308,6 +383,7 @@ export default function OaPage() {
                 onChange={(e) => setFilterStatus(e.target.value)}
               >
                 <option value="">{t("oa.filters.statusAll")}</option>
+                <option value="unassigned">{statusLabel("unassigned")}</option>
                 {STATUS_ORDER.map((s) => (
                   <option key={s} value={s}>
                     {statusLabel(s)}
@@ -375,7 +451,7 @@ export default function OaPage() {
 
       {loading ? (
         <p className="text-muted-foreground">{t("oa.loading")}</p>
-      ) : tab === "overview" && byStatus && byKind ? (
+      ) : tab === "overview" && isLeagueAdmin && byStatus && byKind ? (
         <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
           <div className="mb-4 grid gap-4 sm:grid-cols-2">
             <div>
@@ -400,7 +476,7 @@ export default function OaPage() {
             </div>
           </div>
           <TaskList
-            items={items}
+            items={overviewItems}
             expandedId={expandedId}
             onToggleExpand={toggleExpand}
             timelines={timelines}
@@ -409,12 +485,144 @@ export default function OaPage() {
             t={t}
             statusLabel={statusLabel}
             kindLabel={kindLabel}
+            showAssigneeRow
           />
+        </div>
+      ) : tab === "mine" ? (
+        <div className="flex flex-col gap-6">
+          <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+            <h2 className="mb-3 text-sm font-medium">{t("oa.mineAssignedSection")}</h2>
+            <TaskList
+              items={mine}
+              expandedId={expandedId}
+              onToggleExpand={toggleExpand}
+              timelines={timelines}
+              loadingTimeline={loadingTimeline}
+              onAdvance={advanceAssignment}
+              t={t}
+              statusLabel={statusLabel}
+              kindLabel={kindLabel}
+              emptyLabel={t("oa.mineEmpty")}
+              showAssigneeRow
+            />
+          </div>
+          {canCoordination ? (
+            <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+              <h2 className="mb-3 text-sm font-medium">{t("oa.coordinationSection")}</h2>
+              {coordination.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("oa.coordinationEmpty")}</p>
+              ) : (
+                <ul className="space-y-4">
+                  {coordination.map((row) => (
+                    <li
+                      key={row.task.id}
+                      className="rounded-md border border-border bg-background/50 p-3 text-sm"
+                    >
+                      <div className="font-medium">{row.task.title}</div>
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        {row.task.kind ? (
+                          <span className="rounded bg-muted px-2 py-0.5">{kindLabel(row.task.kind)}</span>
+                        ) : null}
+                        {row.primaryOrgNameShort ? (
+                          <span>
+                            {t("oa.primaryOrg")}: {row.primaryOrgNameShort}
+                          </span>
+                        ) : null}
+                        {row.involvedOrgIds.length > 0 ? (
+                          <span>
+                            {t("oa.involved")}: {row.involvedOrgIds.length}
+                          </span>
+                        ) : null}
+                      </div>
+                      {row.task.description ? (
+                        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{row.task.description}</p>
+                      ) : null}
+                      <p className="mt-2 text-xs font-medium text-muted-foreground">
+                        {t("oa.coordinationAssignees")}
+                      </p>
+                      {row.assignments.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">{t("oa.assigneeNone")}</p>
+                      ) : (
+                        <ul className="mt-1 space-y-1 text-xs">
+                          {row.assignments.map((a) => (
+                            <li key={a.id}>
+                              {a.assigneeDisplayName ?? a.assigneeUserId.slice(0, 8) + "…"} ·{" "}
+                              {statusLabel(a.status)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {coordAddingForTaskId === row.task.id ? (
+                        <div className="mt-2">
+                          <div className="rounded-md border border-border bg-background">
+                            <input
+                              className="w-full border-b border-border bg-transparent px-2 py-1.5 text-xs outline-none"
+                              value={coordStudentQ}
+                              onChange={(e) => setCoordStudentQ(e.target.value)}
+                              placeholder={t("orgManage.pickStudentFilter")}
+                            />
+                            <div className="max-h-40 overflow-y-auto">
+                              {coordStudentHits.length === 0 ? (
+                                <p className="px-2 py-2 text-xs text-muted-foreground">
+                                  {t("orgManage.pickStudentEmpty")}
+                                </p>
+                              ) : (
+                                <ul className="divide-y divide-border text-xs">
+                                  {coordStudentHits.map((u) => {
+                                    const taken = row.assignments.some((a) => a.assigneeUserId === u.id);
+                                    return (
+                                      <li key={u.id}>
+                                        <button
+                                          type="button"
+                                          disabled={taken}
+                                          className="w-full px-2 py-1.5 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                                          onClick={() => void addCoordAssignee(row.task.id, u.id)}
+                                        >
+                                          <span className="font-medium">{u.displayName}</span>
+                                          <span className="ml-1 text-muted-foreground">{u.email}</span>
+                                          {taken ? ` · ${t("oa.assigneeAlreadyAdded")}` : null}
+                                        </button>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="mt-2 text-xs text-muted-foreground underline"
+                            onClick={() => {
+                              setCoordAddingForTaskId(null);
+                              setCoordStudentQ("");
+                            }}
+                          >
+                            {t("oa.cancelAddAssignee")}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="mt-2 rounded border border-border px-2 py-1 text-xs hover:bg-muted"
+                          onClick={() => {
+                            setCoordAddingForTaskId(row.task.id);
+                            setCoordStudentQ("");
+                          }}
+                        >
+                          {t("oa.addAssignee")}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
           <TaskList
-            items={items}
+            items={overviewItems}
             expandedId={expandedId}
             onToggleExpand={toggleExpand}
             timelines={timelines}
@@ -423,6 +631,7 @@ export default function OaPage() {
             t={t}
             statusLabel={statusLabel}
             kindLabel={kindLabel}
+            showAssigneeRow
           />
         </div>
       )}
@@ -440,6 +649,8 @@ function TaskList(props: {
   t: (key: string, opts?: { defaultValue?: string }) => string;
   statusLabel: (s: string) => string;
   kindLabel: (k: string) => string;
+  showAssigneeRow?: boolean;
+  emptyLabel?: string;
 }) {
   const {
     items,
@@ -451,16 +662,20 @@ function TaskList(props: {
     t,
     statusLabel,
     kindLabel,
+    showAssigneeRow,
+    emptyLabel,
   } = props;
 
   if (items.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t("oa.empty")}</p>;
+    return (
+      <p className="text-sm text-muted-foreground">{emptyLabel ?? t("oa.empty")}</p>
+    );
   }
 
   return (
     <ul className="divide-y divide-border">
       {items.map((row) => (
-        <li key={row.assignment.id} className="py-3 text-sm">
+        <li key={`${row.task.id}-${row.assignment.id}`} className="py-3 text-sm">
           <div className="font-medium">{row.task.title}</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="rounded bg-muted px-2 py-0.5">{statusLabel(row.assignment.status)}</span>
@@ -470,6 +685,15 @@ function TaskList(props: {
             {row.primaryOrgNameShort ? (
               <span>
                 {t("oa.primaryOrg")}: {row.primaryOrgNameShort}
+              </span>
+            ) : null}
+            {showAssigneeRow ? (
+              <span>
+                {t("oa.assignee")}:{" "}
+                {row.assignment.assigneeUserId
+                  ? row.assignment.assigneeDisplayName ??
+                    `${row.assignment.assigneeUserId.slice(0, 8)}…`
+                  : t("oa.assigneeNone")}
               </span>
             ) : null}
             {row.task.startsAt ? ` · ${formatDisplayDateTime(row.task.startsAt)}` : null}
@@ -498,6 +722,8 @@ function TaskList(props: {
               >
                 {t("oa.advanceStatus")}
               </button>
+            ) : row.assignment.status === "unassigned" ? (
+              <span className="text-xs text-muted-foreground">{t("oa.unassignedCannotAdvance")}</span>
             ) : (
               <span className="text-xs text-muted-foreground">{t("oa.doneStatus")}</span>
             )}

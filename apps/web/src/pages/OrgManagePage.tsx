@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch, readErrorMessage, readJson } from "../lib/api";
 import { formatDisplayDateTime } from "../lib/format-date";
@@ -139,6 +147,26 @@ const btnGhost =
 const btnDanger =
   "rounded-md border border-destructive/40 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50";
 
+function SearchableScrollBox(props: {
+  search: string;
+  onSearchChange: (v: string) => void;
+  searchPlaceholder: string;
+  children: ReactNode;
+}) {
+  const { search, onSearchChange, searchPlaceholder, children } = props;
+  return (
+    <div className="mt-1 rounded-md border border-border bg-background">
+      <input
+        className="w-full border-b border-border bg-transparent px-2 py-1.5 text-sm outline-none"
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+        placeholder={searchPlaceholder}
+      />
+      <div className="max-h-40 overflow-y-auto">{children}</div>
+    </div>
+  );
+}
+
 export default function OrgManagePage() {
   const { t } = useTranslation("common");
   const { user, refreshMe } = useSession();
@@ -169,12 +197,26 @@ export default function OrgManagePage() {
   const [revLogoUrl, setRevLogoUrl] = useState("");
   const [advisorField, setAdvisorField] = useState("");
   const [memberUserId, setMemberUserId] = useState("");
+  const [memberPickLabel, setMemberPickLabel] = useState("");
   const [memberTitle, setMemberTitle] = useState("");
   const [events, setEvents] = useState<LeadershipEvent[]>([]);
   const [instrQuery, setInstrQuery] = useState("");
-  const [instrHits, setInstrHits] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [instrHits, setInstrHits] = useState<Array<{ id: string; displayName: string; email: string }>>([]);
+  const [orgPickSearch, setOrgPickSearch] = useState("");
+  const [assigneeSearchQ, setAssigneeSearchQ] = useState("");
+  const [assigneeHits, setAssigneeHits] = useState<
+    Array<{ id: string; displayName: string; email: string; volunteerNumber: string | null }>
+  >([]);
+  const [assigneeMeta, setAssigneeMeta] = useState<Record<string, string>>({});
+  const [memberSearchQ, setMemberSearchQ] = useState("");
+  const [memberHits, setMemberHits] = useState<
+    Array<{ id: string; displayName: string; email: string; volunteerNumber: string | null }>
+  >([]);
 
   const logoFileRef = useRef<HTMLInputElement | null>(null);
+  const instrSearchTimer = useRef<number | null>(null);
+  const assigneeSearchTimer = useRef<number | null>(null);
+  const memberSearchTimer = useRef<number | null>(null);
 
   const [taskKind, setTaskKind] = useState<"single" | "cross" | "transfer">("single");
   const [taskTitle, setTaskTitle] = useState("");
@@ -186,8 +228,9 @@ export default function OrgManagePage() {
   const [taskEnds, setTaskEnds] = useState(() =>
     toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)),
   );
-  const [taskInvolvedRaw, setTaskInvolvedRaw] = useState("");
-  const [taskAssigneesRaw, setTaskAssigneesRaw] = useState("");
+  const [directoryOrgs, setDirectoryOrgs] = useState<OrgJson[]>([]);
+  const [involvedOrgIds, setInvolvedOrgIds] = useState<string[]>([]);
+  const [assigneeUserIds, setAssigneeUserIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (memberships.length > 0 && !officerOrgId) {
@@ -197,9 +240,93 @@ export default function OrgManagePage() {
 
   useEffect(() => {
     if (officerOrgId) {
-      setTaskInvolvedRaw(officerOrgId);
+      setInvolvedOrgIds([officerOrgId]);
     }
   }, [officerOrgId]);
+
+  useEffect(() => {
+    if (!canOfficerSection) return;
+    void (async () => {
+      const res = await apiFetch("/orgs");
+      if (res.ok) {
+        const body = await readJson<{ organizations: OrgJson[] }>(res);
+        setDirectoryOrgs(body.organizations);
+      }
+    })();
+  }, [canOfficerSection]);
+
+  useEffect(() => {
+    if (!canOfficerSection) return;
+    if (instrSearchTimer.current != null) window.clearTimeout(instrSearchTimer.current);
+    instrSearchTimer.current = window.setTimeout(() => {
+      instrSearchTimer.current = null;
+      void (async () => {
+        const res = await apiFetch(
+          `/directory/instructors?browse=1&q=${encodeURIComponent(instrQuery)}&limit=50`,
+        );
+        if (!res.ok) return;
+        const body = await readJson<{
+          users: Array<{ id: string; displayName: string; email: string }>;
+        }>(res);
+        setInstrHits(body.users);
+      })();
+    }, 280);
+    return () => {
+      if (instrSearchTimer.current != null) window.clearTimeout(instrSearchTimer.current);
+    };
+  }, [instrQuery, canOfficerSection]);
+
+  useEffect(() => {
+    if (!canOfficerSection) return;
+    if (assigneeSearchTimer.current != null) window.clearTimeout(assigneeSearchTimer.current);
+    assigneeSearchTimer.current = window.setTimeout(() => {
+      assigneeSearchTimer.current = null;
+      void (async () => {
+        const res = await apiFetch(
+          `/directory/students?browse=1&q=${encodeURIComponent(assigneeSearchQ)}&limit=50`,
+        );
+        if (!res.ok) return;
+        const body = await readJson<{
+          users: Array<{
+            id: string;
+            displayName: string;
+            email: string;
+            volunteerNumber: string | null;
+          }>;
+        }>(res);
+        setAssigneeHits(body.users);
+      })();
+    }, 280);
+    return () => {
+      if (assigneeSearchTimer.current != null) window.clearTimeout(assigneeSearchTimer.current);
+    };
+  }, [assigneeSearchQ, canOfficerSection]);
+
+  useEffect(() => {
+    if (!canOfficerSection) return;
+    if (memberSearchTimer.current != null) window.clearTimeout(memberSearchTimer.current);
+    memberSearchTimer.current = window.setTimeout(() => {
+      memberSearchTimer.current = null;
+      void (async () => {
+        const res = await apiFetch(
+          `/directory/students?browse=1&q=${encodeURIComponent(memberSearchQ)}&limit=50`,
+        );
+        if (!res.ok) return;
+        const body = await readJson<{
+          users: Array<{
+            id: string;
+            displayName: string;
+            email: string;
+            volunteerNumber: string | null;
+          }>;
+        }>(res);
+        setMemberHits(body.users);
+      })();
+    }, 280);
+    return () => {
+      if (memberSearchTimer.current != null) window.clearTimeout(memberSearchTimer.current);
+    };
+  }, [memberSearchQ, canOfficerSection]);
 
   const loadLeague = useCallback(async () => {
     const qs = lifecycleFilter ? `?lifecycle=${encodeURIComponent(lifecycleFilter)}` : "";
@@ -250,8 +377,11 @@ export default function OrgManagePage() {
     const now = new Date();
     setTaskStarts(toDateTimeLocalValue(now));
     setTaskEnds(toDateTimeLocalValue(new Date(now.getTime() + 60 * 60 * 1000)));
-    setTaskInvolvedRaw(orgId);
-    setTaskAssigneesRaw("");
+    setInvolvedOrgIds([orgId]);
+    setAssigneeUserIds([]);
+    setAssigneeMeta({});
+    setMemberUserId("");
+    setMemberPickLabel("");
     setError(null);
   }, []);
 
@@ -399,22 +529,6 @@ export default function OrgManagePage() {
     }
   };
 
-  const searchInstructors = async () => {
-    const q = instrQuery.trim();
-    if (q.length < 2) {
-      setError(t("orgManage.searchMin"));
-      return;
-    }
-    const res = await apiFetch(`/directory/instructors?q=${encodeURIComponent(q)}&limit=20`);
-    if (!res.ok) {
-      setError(await readErrorMessage(res));
-      return;
-    }
-    const body = await readJson<{ users: Array<{ id: string; displayName: string }> }>(res);
-    setInstrHits(body.users);
-    setError(null);
-  };
-
   const submitOrgTask = async () => {
     if (!officerOrgId || !orgDetail) return;
     if (orgDetail.lifecycleStatus !== "active") {
@@ -423,26 +537,12 @@ export default function OrgManagePage() {
     }
     const title = taskTitle.trim();
     if (!title) return;
-    const involved = [
-      ...new Set(
-        taskInvolvedRaw
-          .split(/[\s,]+/)
-          .map((s) => s.trim())
-          .filter(Boolean),
-      ),
-    ];
+    const involved = [...new Set(involvedOrgIds)];
     if (!involved.includes(officerOrgId)) {
       setError(t("orgManage.orgTaskInvolvedMustIncludeSelf"));
       return;
     }
-    const assignees = [
-      ...new Set(
-        taskAssigneesRaw
-          .split(/[\s,]+/)
-          .map((s) => s.trim())
-          .filter(Boolean),
-      ),
-    ];
+    const assignees = [...new Set(assigneeUserIds)];
     const starts = fromDateTimeLocal(taskStarts);
     const ends = fromDateTimeLocal(taskEnds);
     if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime()) || starts >= ends) {
@@ -509,11 +609,39 @@ export default function OrgManagePage() {
         return;
       }
       setMemberUserId("");
+      setMemberPickLabel("");
       setMemberTitle("");
       await loadOfficerOrg(officerOrgId);
     } finally {
       setBusy(false);
     }
+  };
+
+  const filteredDirectoryOrgs = useMemo(() => {
+    const q = orgPickSearch.trim().toLowerCase();
+    if (!q) return directoryOrgs;
+    return directoryOrgs.filter(
+      (o) => o.nameShort.toLowerCase().includes(q) || o.nameFull.toLowerCase().includes(q),
+    );
+  }, [directoryOrgs, orgPickSearch]);
+
+  const toggleInvolvedOrg = (orgIdToggle: string) => {
+    setInvolvedOrgIds((prev) => {
+      if (prev.includes(orgIdToggle)) {
+        if (orgIdToggle === officerOrgId) return prev;
+        return prev.filter((x) => x !== orgIdToggle);
+      }
+      return [...prev, orgIdToggle];
+    });
+  };
+
+  const addTaskAssignee = (id: string, displayName: string) => {
+    setAssigneeUserIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setAssigneeMeta((m) => ({ ...m, [id]: displayName }));
+  };
+
+  const removeTaskAssignee = (id: string) => {
+    setAssigneeUserIds((prev) => prev.filter((x) => x !== id));
   };
 
   if (!user || loading) {
@@ -851,24 +979,78 @@ export default function OrgManagePage() {
                         />
                       </label>
                     </div>
-                    <label className="text-xs text-muted-foreground">
-                      {t("orgManage.orgTaskInvolvedHint")}
-                      <input
-                        className={`${inputClass} mt-1 font-mono text-xs`}
-                        value={taskInvolvedRaw}
-                        onChange={(e) => setTaskInvolvedRaw(e.target.value)}
-                        placeholder={officerOrgId}
-                      />
-                    </label>
-                    <label className="text-xs text-muted-foreground">
-                      {t("orgManage.orgTaskAssigneesHint")}
-                      <input
-                        className={`${inputClass} mt-1 font-mono text-xs`}
-                        value={taskAssigneesRaw}
-                        onChange={(e) => setTaskAssigneesRaw(e.target.value)}
-                        placeholder={t("orgManage.orgTaskAssigneesPlaceholder")}
-                      />
-                    </label>
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{t("orgManage.orgTaskInvolvedHint")}</span>
+                      <SearchableScrollBox
+                        search={orgPickSearch}
+                        onSearchChange={setOrgPickSearch}
+                        searchPlaceholder={t("orgManage.pickOrgFilter")}
+                      >
+                        {filteredDirectoryOrgs.length === 0 ? (
+                          <p className="px-2 py-2 text-muted-foreground">{t("orgManage.pickOrgEmpty")}</p>
+                        ) : (
+                          <ul className="divide-y divide-border text-sm">
+                            {filteredDirectoryOrgs.map((o) => (
+                              <li key={o.id}>
+                                <label className="flex cursor-pointer items-center gap-2 px-2 py-1.5 hover:bg-muted">
+                                  <input
+                                    type="checkbox"
+                                    checked={involvedOrgIds.includes(o.id)}
+                                    onChange={() => toggleInvolvedOrg(o.id)}
+                                  />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="font-medium">{o.nameShort}</span>
+                                    <span className="ml-1 text-muted-foreground">{o.nameFull}</span>
+                                  </span>
+                                </label>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </SearchableScrollBox>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{t("orgManage.orgTaskAssigneesHint")}</span>
+                      {assigneeUserIds.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {assigneeUserIds.map((id) => (
+                            <button
+                              key={id}
+                              type="button"
+                              className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs hover:bg-muted"
+                              onClick={() => removeTaskAssignee(id)}
+                            >
+                              {assigneeMeta[id] ?? id.slice(0, 8) + "…"} ×
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      <SearchableScrollBox
+                        search={assigneeSearchQ}
+                        onSearchChange={setAssigneeSearchQ}
+                        searchPlaceholder={t("orgManage.pickStudentFilter")}
+                      >
+                        {assigneeHits.length === 0 ? (
+                          <p className="px-2 py-2 text-muted-foreground">{t("orgManage.pickStudentEmpty")}</p>
+                        ) : (
+                          <ul className="divide-y divide-border text-sm">
+                            {assigneeHits.map((u) => (
+                              <li key={u.id}>
+                                <button
+                                  type="button"
+                                  disabled={assigneeUserIds.includes(u.id)}
+                                  className="w-full px-2 py-1.5 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                                  onClick={() => addTaskAssignee(u.id, u.displayName)}
+                                >
+                                  <span className="font-medium">{u.displayName}</span>
+                                  <span className="ml-1 text-muted-foreground">{u.email}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </SearchableScrollBox>
+                    </div>
                     <button
                       type="button"
                       className={`${btnPrimary} w-fit`}
@@ -883,13 +1065,14 @@ export default function OrgManagePage() {
 
               <div>
                 <h3 className="mb-2 font-medium">{t("orgManage.advisor")}</h3>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    className={inputClass}
-                    value={advisorField}
-                    onChange={(e) => setAdvisorField(e.target.value)}
-                    placeholder={t("orgManage.advisorUserId")}
-                  />
+                <p className="mb-2 text-xs text-muted-foreground">
+                  {advisorField.trim()
+                    ? t("orgManage.advisorSelectedHint", {
+                        id: advisorField.trim().slice(0, 8) + "…",
+                      })
+                    : t("orgManage.advisorNone")}
+                </p>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     className={btnPrimary}
@@ -910,43 +1093,70 @@ export default function OrgManagePage() {
                     {t("orgManage.clearAdvisor")}
                   </button>
                 </div>
-                <div className="mt-3 flex flex-wrap items-end gap-2">
-                  <input
-                    className="max-w-xs rounded border border-input bg-background px-2 py-1 text-sm"
-                    value={instrQuery}
-                    onChange={(e) => setInstrQuery(e.target.value)}
-                    placeholder={t("orgManage.instructorSearch")}
-                  />
-                  <button type="button" className={btnGhost} disabled={busy} onClick={() => void searchInstructors()}>
-                    {t("orgManage.search")}
-                  </button>
-                </div>
-                {instrHits.length > 0 ? (
-                  <ul className="mt-2 max-w-lg rounded border border-border text-xs">
-                    {instrHits.map((h) => (
-                      <li key={h.id}>
-                        <button
-                          type="button"
-                          className="w-full px-2 py-1 text-left hover:bg-muted"
-                          onClick={() => setAdvisorField(h.id)}
-                        >
-                          {h.displayName} · {h.id.slice(0, 8)}…
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
+                <p className="mb-1 text-xs font-medium text-foreground">{t("orgManage.pickInstructorTitle")}</p>
+                <SearchableScrollBox
+                  search={instrQuery}
+                  onSearchChange={setInstrQuery}
+                  searchPlaceholder={t("orgManage.instructorSearchBrowse")}
+                >
+                  {instrHits.length === 0 ? (
+                    <p className="px-2 py-2 text-muted-foreground">{t("orgManage.pickInstructorEmpty")}</p>
+                  ) : (
+                    <ul className="divide-y divide-border text-sm">
+                      {instrHits.map((h) => (
+                        <li key={h.id}>
+                          <button
+                            type="button"
+                            className="w-full px-2 py-1.5 text-left hover:bg-muted"
+                            onClick={() => setAdvisorField(h.id)}
+                          >
+                            <span className="font-medium">{h.displayName}</span>
+                            <span className="ml-1 text-muted-foreground">{h.email}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </SearchableScrollBox>
               </div>
 
               <div>
                 <h3 className="mb-2 font-medium">{t("orgManage.addMember")}</h3>
-                <div className="flex flex-wrap gap-2">
-                  <input
-                    className={inputClass}
-                    value={memberUserId}
-                    onChange={(e) => setMemberUserId(e.target.value)}
-                    placeholder={t("orgManage.memberUserId")}
-                  />
+                <p className="mb-1 text-xs text-muted-foreground">
+                  {memberUserId.trim()
+                    ? t("orgManage.memberSelectedHint", {
+                        label: memberPickLabel || memberUserId.slice(0, 8) + "…",
+                      })
+                    : t("orgManage.memberPickHint")}
+                </p>
+                <SearchableScrollBox
+                  search={memberSearchQ}
+                  onSearchChange={setMemberSearchQ}
+                  searchPlaceholder={t("orgManage.pickStudentFilter")}
+                >
+                  {memberHits.length === 0 ? (
+                    <p className="px-2 py-2 text-muted-foreground">{t("orgManage.pickStudentEmpty")}</p>
+                  ) : (
+                    <ul className="divide-y divide-border text-sm">
+                      {memberHits.map((u) => (
+                        <li key={u.id}>
+                          <button
+                            type="button"
+                            className="w-full px-2 py-1.5 text-left hover:bg-muted"
+                            onClick={() => {
+                              setMemberUserId(u.id);
+                              setMemberPickLabel(u.displayName);
+                            }}
+                          >
+                            <span className="font-medium">{u.displayName}</span>
+                            <span className="ml-1 text-muted-foreground">{u.email}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </SearchableScrollBox>
+                <div className="mt-2 flex flex-wrap gap-2">
                   <input
                     className={inputClass}
                     value={memberTitle}

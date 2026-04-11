@@ -5,12 +5,14 @@ import { db } from "db";
 import {
   notifications,
   orgMemberships,
+  organizations,
   orgTaskAssignments,
   orgTaskHandoffs,
   orgTaskInvolvedOrgs,
   orgTaskStatusEvents,
   orgTasks,
   userRoles,
+  users,
 } from "db/schema";
 import { broadcastOrgTaskRefreshForTask } from "../lib/org-task-broadcast.js";
 import { broadcastNotification } from "../lib/notification-broadcast.js";
@@ -54,6 +56,22 @@ const handoffSchema = z
     note: z.union([z.string(), z.null()]).optional(),
   })
   .strict();
+
+const addAssigneesBodySchema = z
+  .object({
+    assigneeUserIds: z.array(z.string().uuid()).min(1).max(40),
+  })
+  .strict();
+
+async function displayNameByUserId(userIds: string[]): Promise<Map<string, string>> {
+  const uniq = [...new Set(userIds)];
+  if (uniq.length === 0) return new Map();
+  const rows = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(inArray(users.id, uniq));
+  return new Map(rows.map((r) => [r.id, r.displayName]));
+}
 
 async function isLeagueAdmin(userId: string): Promise<boolean> {
   const [row] = await db
@@ -150,12 +168,16 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables }>()
       involvedByTask.set(row.taskId, list);
     }
 
+    const assigneeIds = rows.map((r) => r.assignment.assigneeUserId);
+    const nameMap = await displayNameByUserId(assigneeIds);
+
     return c.json({
       items: rows.map((r) => ({
         assignment: {
           id: r.assignment.id,
           taskId: r.assignment.taskId,
           assigneeUserId: r.assignment.assigneeUserId,
+          assigneeDisplayName: nameMap.get(r.assignment.assigneeUserId) ?? null,
           status: r.assignment.status,
           updatedAt: r.assignment.updatedAt.toISOString(),
         },
@@ -163,6 +185,105 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables }>()
         involvedOrgIds: involvedByTask.get(r.task.id) ?? [],
       })),
     });
+  })
+  .get("/coordination", requireUser, async (c) => {
+    const userId = c.get("userId")!;
+
+    const officerOrgRows = await db
+      .select({ orgId: orgMemberships.orgId })
+      .from(orgMemberships)
+      .innerJoin(userRoles, eq(userRoles.userId, orgMemberships.userId))
+      .where(
+        and(
+          eq(orgMemberships.userId, userId),
+          inArray(userRoles.role, ["org_president", "org_officer"] as const),
+        ),
+      );
+
+    const officerOrgIds = [...new Set(officerOrgRows.map((r) => r.orgId))];
+    if (officerOrgIds.length === 0) {
+      return c.json({ items: [] });
+    }
+
+    const fromPrimary = await db
+      .select({ id: orgTasks.id })
+      .from(orgTasks)
+      .where(inArray(orgTasks.orgId, officerOrgIds));
+    const fromInvolved = await db
+      .select({ taskId: orgTaskInvolvedOrgs.taskId })
+      .from(orgTaskInvolvedOrgs)
+      .where(inArray(orgTaskInvolvedOrgs.orgId, officerOrgIds));
+
+    const taskIdSet = new Set<string>([
+      ...fromPrimary.map((r) => r.id),
+      ...fromInvolved.map((r) => r.taskId),
+    ]);
+    const taskIds = [...taskIdSet];
+
+    if (taskIds.length === 0) {
+      return c.json({ items: [] });
+    }
+
+    const tasksWithOrg = await db
+      .select({
+        task: orgTasks,
+        primaryOrgNameShort: organizations.nameShort,
+      })
+      .from(orgTasks)
+      .innerJoin(organizations, eq(organizations.id, orgTasks.orgId))
+      .where(inArray(orgTasks.id, taskIds))
+      .orderBy(asc(orgTasks.createdAt));
+
+    const allAssignments = await db
+      .select()
+      .from(orgTaskAssignments)
+      .where(inArray(orgTaskAssignments.taskId, taskIds));
+
+    const assignByTask = new Map<string, (typeof orgTaskAssignments.$inferSelect)[]>();
+    for (const a of allAssignments) {
+      const list = assignByTask.get(a.taskId) ?? [];
+      list.push(a);
+      assignByTask.set(a.taskId, list);
+    }
+    for (const [, list] of assignByTask) {
+      list.sort((x, y) => x.id.localeCompare(y.id));
+    }
+
+    const involvedRows = await db
+      .select({
+        taskId: orgTaskInvolvedOrgs.taskId,
+        orgId: orgTaskInvolvedOrgs.orgId,
+      })
+      .from(orgTaskInvolvedOrgs)
+      .where(inArray(orgTaskInvolvedOrgs.taskId, taskIds));
+
+    const involvedByTask = new Map<string, string[]>();
+    for (const row of involvedRows) {
+      const list = involvedByTask.get(row.taskId) ?? [];
+      list.push(row.orgId);
+      involvedByTask.set(row.taskId, list);
+    }
+
+    const allAssigneeIds = allAssignments.map((a) => a.assigneeUserId);
+    const nameMap = await displayNameByUserId(allAssigneeIds);
+
+    const items = tasksWithOrg.map((row) => {
+      const assigns = assignByTask.get(row.task.id) ?? [];
+      return {
+        task: taskToJson(row.task),
+        primaryOrgNameShort: row.primaryOrgNameShort,
+        involvedOrgIds: involvedByTask.get(row.task.id) ?? [],
+        assignments: assigns.map((a) => ({
+          id: a.id,
+          assigneeUserId: a.assigneeUserId,
+          assigneeDisplayName: nameMap.get(a.assigneeUserId) ?? null,
+          status: a.status,
+          updatedAt: a.updatedAt.toISOString(),
+        })),
+      };
+    });
+
+    return c.json({ items });
   })
   .get("/:taskId/timeline", requireUser, async (c) => {
     const taskId = c.req.param("taskId");
@@ -187,6 +308,80 @@ export const tasksRouter = new Hono<{ Variables: AuthVariables }>()
     const events = mergeTaskTimelineItems(statusRows, handoffRows);
 
     return c.json({ taskId, events });
+  })
+  .post("/:taskId/assignments", requireUser, async (c) => {
+    const taskId = c.req.param("taskId");
+    if (!isUuid(taskId)) {
+      return c.json({ error: "Invalid task id" }, 400);
+    }
+    const actorId = c.get("userId")!;
+
+    if (!(await canViewTaskTimeline(actorId, taskId))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const raw = await parseJsonBody(c);
+    if (raw === null || typeof raw !== "object") {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const parsed = addAssigneesBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+    }
+
+    const requested = [...new Set(parsed.data.assigneeUserIds)];
+
+    const [task] = await db.select().from(orgTasks).where(eq(orgTasks.id, taskId)).limit(1);
+    if (!task) {
+      return c.json({ error: "Task not found" }, 404);
+    }
+
+    const existing = await db
+      .select({ assigneeUserId: orgTaskAssignments.assigneeUserId })
+      .from(orgTaskAssignments)
+      .where(eq(orgTaskAssignments.taskId, taskId));
+    const existingSet = new Set(existing.map((e) => e.assigneeUserId));
+    const toAdd = requested.filter((id) => !existingSet.has(id));
+
+    if (toAdd.length === 0) {
+      return c.json({ added: [] });
+    }
+
+    const userRows = await db.select({ id: users.id }).from(users).where(inArray(users.id, toAdd));
+    if (userRows.length !== toAdd.length) {
+      return c.json({ error: "One or more users do not exist" }, 400);
+    }
+
+    const now = new Date();
+    const inserted = await db
+      .insert(orgTaskAssignments)
+      .values(
+        toAdd.map((assigneeUserId) => ({
+          taskId,
+          assigneeUserId,
+          status: "unread" as const,
+          updatedAt: now,
+        })),
+      )
+      .returning();
+
+    const nameMap = await displayNameByUserId(inserted.map((r) => r.assigneeUserId));
+
+    await broadcastOrgTaskRefreshForTask(taskId);
+
+    return c.json(
+      {
+        added: inserted.map((r) => ({
+          id: r.id,
+          taskId: r.taskId,
+          assigneeUserId: r.assigneeUserId,
+          assigneeDisplayName: nameMap.get(r.assigneeUserId) ?? null,
+          status: r.status,
+          updatedAt: r.updatedAt.toISOString(),
+        })),
+      },
+      201,
+    );
   })
   .patch("/assignments/:assignmentId/status", requireUser, async (c) => {
     const assignmentId = c.req.param("assignmentId");

@@ -9,6 +9,7 @@ import {
   orgTaskAssignments,
   orgTaskInvolvedOrgs,
   orgTasks,
+  users,
 } from "db/schema";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
@@ -17,6 +18,7 @@ import { leagueArchiveRouter } from "./league-archive.js";
 import { coordinationRouter } from "./league-coordination.js";
 
 const STATUS_VALUES = ["unread", "read", "in_progress", "done"] as const;
+const TASK_OVERVIEW_STATUS_VALUES = [...STATUS_VALUES, "unassigned"] as const;
 const KIND_VALUES = ["single", "cross", "transfer"] as const;
 const LIFECYCLE_VALUES = ["pending", "active", "suspended"] as const;
 
@@ -193,7 +195,7 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
     if (
       statusRaw !== undefined &&
       statusRaw !== "" &&
-      !STATUS_VALUES.includes(statusRaw as (typeof STATUS_VALUES)[number])
+      !TASK_OVERVIEW_STATUS_VALUES.includes(statusRaw as (typeof TASK_OVERVIEW_STATUS_VALUES)[number])
     ) {
       return c.json({ error: "Invalid status" }, 400);
     }
@@ -243,7 +245,7 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
             ),
           );
 
-    const baseConds = [eq(orgTasks.leagueVisible, true)];
+    const baseConds = [];
     if (orgMatch) baseConds.push(orgMatch);
     if (kind) {
       baseConds.push(eq(orgTasks.kind, kind as (typeof KIND_VALUES)[number]));
@@ -257,28 +259,39 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
     if (toDt) {
       baseConds.push(lte(orgTasks.createdAt, toDt));
     }
-    const taskFilter = and(...baseConds);
+    const taskFilter = baseConds.length ? and(...baseConds) : undefined;
 
-    const assignConds = [...baseConds];
-    if (status) {
-      assignConds.push(eq(orgTaskAssignments.status, status as (typeof STATUS_VALUES)[number]));
-    }
-    const assignFilter = and(...assignConds);
-
-    const rows = await db
+    const tasksRows = await db
       .select({
-        assignment: orgTaskAssignments,
         task: orgTasks,
         primaryOrgNameShort: organizations.nameShort,
       })
-      .from(orgTaskAssignments)
-      .innerJoin(orgTasks, eq(orgTaskAssignments.taskId, orgTasks.id))
+      .from(orgTasks)
       .innerJoin(organizations, eq(organizations.id, orgTasks.orgId))
-      .where(assignFilter!)
-      .orderBy(asc(orgTasks.createdAt), asc(orgTaskAssignments.id));
+      .where(taskFilter)
+      .orderBy(asc(orgTasks.createdAt));
 
-    const taskIds = [...new Set(rows.map((r) => r.task.id))];
-    const involved: { taskId: string; orgId: string }[] =
+    const taskIds = tasksRows.map((r) => r.task.id);
+
+    const allAssignments =
+      taskIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(orgTaskAssignments)
+            .where(inArray(orgTaskAssignments.taskId, taskIds));
+
+    const assignByTask = new Map<string, (typeof orgTaskAssignments.$inferSelect)[]>();
+    for (const a of allAssignments) {
+      const list = assignByTask.get(a.taskId) ?? [];
+      list.push(a);
+      assignByTask.set(a.taskId, list);
+    }
+    for (const [, list] of assignByTask) {
+      list.sort((x, y) => x.id.localeCompare(y.id));
+    }
+
+    const involvedRows =
       taskIds.length === 0
         ? []
         : await db
@@ -290,31 +303,123 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
             .where(inArray(orgTaskInvolvedOrgs.taskId, taskIds));
 
     const involvedByTask = new Map<string, string[]>();
-    for (const row of involved) {
+    for (const row of involvedRows) {
       const list = involvedByTask.get(row.taskId) ?? [];
       list.push(row.orgId);
       involvedByTask.set(row.taskId, list);
     }
 
-    const countRows = await db
-      .select({
-        status: orgTaskAssignments.status,
-        n: sql<number>`count(*)::int`,
-      })
-      .from(orgTaskAssignments)
-      .innerJoin(orgTasks, eq(orgTaskAssignments.taskId, orgTasks.id))
-      .where(taskFilter!)
-      .groupBy(orgTaskAssignments.status);
+    type OverviewItem = {
+      assignment: {
+        id: string;
+        taskId: string;
+        assigneeUserId: string | null;
+        assigneeDisplayName: string | null;
+        status: string;
+        updatedAt: string;
+      };
+      task: ReturnType<typeof taskToJson>;
+      primaryOrgNameShort: string | null;
+      involvedOrgIds: string[];
+    };
 
-    const byStatus: Record<(typeof STATUS_VALUES)[number], number> = {
+    const items: OverviewItem[] = [];
+
+    for (const tr of tasksRows) {
+      const assigns = assignByTask.get(tr.task.id) ?? [];
+      const involvedOrgIds = involvedByTask.get(tr.task.id) ?? [];
+      const tj = taskToJson(tr.task);
+
+      if (assigns.length === 0) {
+        if (status && status !== "unassigned") continue;
+        items.push({
+          assignment: {
+            id: `unassigned:${tr.task.id}`,
+            taskId: tr.task.id,
+            assigneeUserId: null,
+            assigneeDisplayName: null,
+            status: "unassigned",
+            updatedAt: tr.task.createdAt.toISOString(),
+          },
+          task: tj,
+          primaryOrgNameShort: tr.primaryOrgNameShort,
+          involvedOrgIds,
+        });
+        continue;
+      }
+
+      if (status === "unassigned") continue;
+
+      for (const a of assigns) {
+        if (status && a.status !== status) continue;
+        items.push({
+          assignment: {
+            id: a.id,
+            taskId: a.taskId,
+            assigneeUserId: a.assigneeUserId,
+            assigneeDisplayName: null,
+            status: a.status,
+            updatedAt: a.updatedAt.toISOString(),
+          },
+          task: tj,
+          primaryOrgNameShort: tr.primaryOrgNameShort,
+          involvedOrgIds,
+        });
+      }
+    }
+
+    const assigneeNameIds = [
+      ...new Set(
+        items
+          .map((i) => i.assignment.assigneeUserId)
+          .filter((id): id is string => id != null && id !== ""),
+      ),
+    ];
+    const nameByUserId = new Map<string, string>();
+    if (assigneeNameIds.length > 0) {
+      const nameRows = await db
+        .select({ id: users.id, displayName: users.displayName })
+        .from(users)
+        .where(inArray(users.id, assigneeNameIds));
+      for (const nr of nameRows) {
+        nameByUserId.set(nr.id, nr.displayName);
+      }
+    }
+    for (const it of items) {
+      const uid = it.assignment.assigneeUserId;
+      if (uid) {
+        it.assignment.assigneeDisplayName = nameByUserId.get(uid) ?? null;
+      }
+    }
+
+    const countRows =
+      taskIds.length === 0
+        ? []
+        : await db
+            .select({
+              status: orgTaskAssignments.status,
+              n: sql<number>`count(*)::int`,
+            })
+            .from(orgTaskAssignments)
+            .innerJoin(orgTasks, eq(orgTaskAssignments.taskId, orgTasks.id))
+            .where(taskFilter)
+            .groupBy(orgTaskAssignments.status);
+
+    const byStatus: Record<(typeof STATUS_VALUES)[number] | "unassigned", number> = {
       unread: 0,
       read: 0,
       in_progress: 0,
       done: 0,
+      unassigned: 0,
     };
     for (const cr of countRows) {
       const s = cr.status as (typeof STATUS_VALUES)[number];
       if (byStatus[s] !== undefined) byStatus[s] = cr.n;
+    }
+    for (const tr of tasksRows) {
+      if ((assignByTask.get(tr.task.id) ?? []).length === 0) {
+        byStatus.unassigned++;
+      }
     }
 
     const kindRows = await db
@@ -323,7 +428,7 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
         n: sql<number>`count(distinct ${orgTasks.id})::int`,
       })
       .from(orgTasks)
-      .where(taskFilter!)
+      .where(taskFilter)
       .groupBy(orgTasks.kind);
 
     const byKind: Record<(typeof KIND_VALUES)[number], number> = {
@@ -337,18 +442,7 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
     }
 
     return c.json({
-      items: rows.map((r) => ({
-        assignment: {
-          id: r.assignment.id,
-          taskId: r.assignment.taskId,
-          assigneeUserId: r.assignment.assigneeUserId,
-          status: r.assignment.status,
-          updatedAt: r.assignment.updatedAt.toISOString(),
-        },
-        task: taskToJson(r.task),
-        primaryOrgNameShort: r.primaryOrgNameShort,
-        involvedOrgIds: involvedByTask.get(r.task.id) ?? [],
-      })),
+      items,
       byStatus,
       byKind,
     });
