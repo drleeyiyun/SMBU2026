@@ -48,11 +48,14 @@ export type MergeTimelineSourcesInput = {
   plans: TimelinePlanInput[];
   orgTasks: TimelineOrgTaskInput[];
   leagueCoordination: TimelineCoordinationInput[];
+  /** Legacy rows from org_timeline_events table (merged into org_activity). */
   orgTimeline?: TimelineOrgPublishedInput[];
+  /** 社团活动（全员任务 + legacy） */
+  orgActivities?: TimelineOrgPublishedInput[];
 };
 
 export type MergedTimelineItem = {
-  sourceType: "schedule" | "plan" | "org_task" | "league_coordination" | "org_timeline";
+  sourceType: "schedule" | "plan" | "org_task" | "league_coordination" | "org_activity";
   sourceId: string;
   title: string;
   startsAt: Date;
@@ -118,8 +121,14 @@ export function mergeTimelineSources(input: MergeTimelineSourcesInput): MergedTi
     });
   }
 
-  for (const o of input.orgTimeline ?? []) {
-    const meta: { kind: string; orgId: string; orgNameShort: string; description?: string } = {
+  const activityInputs = [...(input.orgActivities ?? []), ...(input.orgTimeline ?? [])];
+  for (const o of activityInputs) {
+    const meta: {
+      kind: string;
+      orgId: string;
+      orgNameShort: string;
+      description?: string;
+    } = {
       kind: o.kind,
       orgId: o.orgId,
       orgNameShort: o.orgNameShort,
@@ -128,7 +137,7 @@ export function mergeTimelineSources(input: MergeTimelineSourcesInput): MergedTi
       meta.description = o.description;
     }
     items.push({
-      sourceType: "org_timeline",
+      sourceType: "org_activity",
       sourceId: o.id,
       title: o.title,
       startsAt: o.startsAt,

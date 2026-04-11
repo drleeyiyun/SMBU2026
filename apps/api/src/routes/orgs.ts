@@ -14,6 +14,7 @@ import {
   userRoles,
   users,
 } from "db/schema";
+import { broadcastOrgTaskRefreshForTask } from "../lib/org-task-broadcast.js";
 import { broadcastTimelineRefresh } from "../lib/timeline-broadcast.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
@@ -62,6 +63,9 @@ const taskCreateSchema = z
     endsAt: z.union([z.string().datetime(), z.null()]).optional(),
     involvedOrgIds: z.array(z.string().uuid()).min(1),
     assigneeUserIds: z.array(z.string().uuid()).optional(),
+    timelineAudience: z
+      .enum(["assignees_only", "org_members", "all_students"])
+      .optional(),
   })
   .strict();
 
@@ -877,8 +881,23 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
     }
 
-    const { kind, title, description, startsAt, endsAt, involvedOrgIds, assigneeUserIds } =
-      parsed.data;
+    const {
+      kind,
+      title,
+      description,
+      startsAt,
+      endsAt,
+      involvedOrgIds,
+      assigneeUserIds,
+      timelineAudience: audienceIn,
+    } = parsed.data;
+
+    const timelineAudience = audienceIn ?? "assignees_only";
+    if (timelineAudience !== "assignees_only") {
+      if (!(await canManageOrgRoster(userId, orgId))) {
+        return c.json({ error: "forbidden" }, 403);
+      }
+    }
 
     if (!involvedOrgIds.includes(orgId)) {
       return c.json({ error: "involvedOrgIds must include the primary organization" }, 400);
@@ -899,6 +918,22 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
     const starts = startsAt === undefined || startsAt === null ? null : new Date(startsAt);
     const ends = endsAt === undefined || endsAt === null ? null : new Date(endsAt);
 
+    if (timelineAudience === "all_students" && org.lifecycleStatus !== "active") {
+      return c.json(
+        { error: "Organization must be active to publish activities to all students" },
+        409,
+      );
+    }
+    if (timelineAudience !== "assignees_only" && (starts === null || ends === null)) {
+      return c.json(
+        { error: "startsAt and endsAt are required when publishing to the timeline" },
+        400,
+      );
+    }
+    if (starts !== null && ends !== null && starts >= ends) {
+      return c.json({ error: "startsAt must be before endsAt" }, 400);
+    }
+
     const result = await db.transaction(async (tx) => {
       const [task] = await tx
         .insert(orgTasks)
@@ -908,6 +943,7 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
           description: description === undefined ? null : description,
           kind,
           createdByUserId: userId,
+          timelineAudience,
           startsAt: starts,
           endsAt: ends,
         })
@@ -931,6 +967,11 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
       return task!;
     });
 
+    await broadcastOrgTaskRefreshForTask(result.id);
+    if (timelineAudience !== "assignees_only") {
+      await broadcastTimelineRefresh({ kind: "timeline_refresh", action: "upsert" });
+    }
+
     return c.json(
       {
         task: {
@@ -941,6 +982,7 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
           kind: result.kind,
           createdByUserId: result.createdByUserId,
           leagueVisible: result.leagueVisible,
+          timelineAudience: result.timelineAudience,
           startsAt: result.startsAt?.toISOString() ?? null,
           endsAt: result.endsAt?.toISOString() ?? null,
           createdAt: result.createdAt.toISOString(),

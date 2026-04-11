@@ -146,7 +146,7 @@ function getPlanPriority(meta: unknown): number {
   return typeof p === "number" && !Number.isNaN(p) ? p : 1;
 }
 
-function getOrgTimelineMeta(meta: unknown): {
+function getOrgActivityMeta(meta: unknown): {
   kind: string;
   orgNameShort: string;
   description?: string;
@@ -163,7 +163,7 @@ function getOrgTimelineMeta(meta: unknown): {
   };
 }
 
-function orgTimelineKindLabelKey(kind: string): string {
+function orgActivityKindLabelKey(kind: string): string {
   switch (kind) {
     case "meeting":
       return "orgManage.orgTimelineKind.meeting";
@@ -197,7 +197,7 @@ const sourceTypeStyles: Record<string, string> = {
   plan: "border-l-4 border-l-emerald-500 bg-emerald-500/5",
   org_task: "border-l-4 border-l-amber-500 bg-amber-500/5",
   league_coordination: "border-l-4 border-l-violet-500 bg-violet-500/5",
-  org_timeline: "border-l-4 border-l-rose-500 bg-rose-500/5",
+  org_activity: "border-l-4 border-l-rose-500 bg-rose-500/5",
 };
 
 const legendColors: Record<string, string> = {
@@ -205,7 +205,7 @@ const legendColors: Record<string, string> = {
   plan: "bg-emerald-500",
   org_task: "bg-amber-500",
   league_coordination: "bg-violet-500",
-  org_timeline: "bg-rose-500",
+  org_activity: "bg-rose-500",
 };
 
 function sourceTypeLabelKey(sourceType: string): string {
@@ -218,8 +218,8 @@ function sourceTypeLabelKey(sourceType: string): string {
       return "timeline.sourceOrgTask";
     case "league_coordination":
       return "timeline.sourceLeague";
-    case "org_timeline":
-      return "timeline.sourceOrgTimeline";
+    case "org_activity":
+      return "timeline.sourceOrgActivity";
     default:
       return "timeline.sourceOrgTask";
   }
@@ -552,21 +552,21 @@ export default function TimelinePage() {
     { type: "schedule", labelKey: "timeline.sourceSchedule" },
     { type: "plan", labelKey: "timeline.sourcePlan" },
     { type: "org_task", labelKey: "timeline.sourceOrgTask" },
-    { type: "org_timeline", labelKey: "timeline.sourceOrgTimeline" },
+    { type: "org_activity", labelKey: "timeline.sourceOrgActivity" },
     { type: "league_coordination", labelKey: "timeline.sourceLeague" },
   ];
 
   function renderItemRow(item: TimelineItem) {
     const style = sourceTypeStyles[item.sourceType] ?? "border-l-4 border-l-muted bg-muted/20";
     const cat = item.sourceType === "league_coordination" ? getMetaCategory(item.meta) : null;
-    const orgTm = item.sourceType === "org_timeline" ? getOrgTimelineMeta(item.meta) : null;
+    const orgTm = item.sourceType === "org_activity" ? getOrgActivityMeta(item.meta) : null;
     const loc = getMetaLocation(item.meta);
     const planPri = item.sourceType === "plan" ? getPlanPriority(item.meta) : null;
     let badgeText: string;
     if (item.sourceType === "league_coordination" && cat != null) {
       badgeText = t(leagueCategoryKey(cat));
     } else if (orgTm != null) {
-      badgeText = `${orgTm.orgNameShort} · ${t(orgTimelineKindLabelKey(orgTm.kind))}`;
+      badgeText = `${orgTm.orgNameShort} · ${t(orgActivityKindLabelKey(orgTm.kind))}`;
     } else {
       badgeText = t(sourceTypeLabelKey(item.sourceType));
     }

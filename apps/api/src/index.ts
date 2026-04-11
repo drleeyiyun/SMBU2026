@@ -15,6 +15,7 @@ import { plansRouter } from "./routes/plans.js";
 import { scheduleRouter } from "./routes/schedule.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { timelineRouter } from "./routes/timeline.js";
+import { uploadsRouter } from "./routes/uploads.js";
 
 const env = loadEnv();
 
@@ -50,6 +51,8 @@ app.route("/tasks", tasksRouter);
 app.route("/notifications", notificationsRouter);
 
 app.route("/league", leagueRouter);
+
+app.route("/uploads", uploadsRouter);
 
 serve(
   {

@@ -73,6 +73,7 @@ function taskToJson(t: typeof orgTasks.$inferSelect) {
     kind: t.kind,
     createdByUserId: t.createdByUserId,
     leagueVisible: t.leagueVisible,
+    timelineAudience: t.timelineAudience,
     startsAt: t.startsAt?.toISOString() ?? null,
     endsAt: t.endsAt?.toISOString() ?? null,
     createdAt: t.createdAt.toISOString(),

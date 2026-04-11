@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { apiBase, apiFetch, readErrorMessage, readJson } from "../lib/api";
+import { uploadImageFile } from "../lib/upload-image";
 import { formatDisplayDateTime } from "../lib/format-date";
 
 type AbilityCategory = "technical" | "planning" | "management" | "sports";
@@ -123,6 +124,10 @@ export default function ArchivePage() {
     volunteerNumber: "",
   });
   const [identityErrors, setIdentityErrors] = useState<Set<IdentityField>>(() => new Set());
+  const [imageUploadBusy, setImageUploadBusy] = useState(false);
+  const idPhotoFileRef = useRef<HTMLInputElement | null>(null);
+  const portraitFileRef = useRef<HTMLInputElement | null>(null);
+  const awardProofFileRef = useRef<HTMLInputElement | null>(null);
   const [claimEventId, setClaimEventId] = useState("");
   const [claimHours, setClaimHours] = useState("");
   const [tagLabel, setTagLabel] = useState<Record<AbilityCategory, string>>({
@@ -287,6 +292,40 @@ export default function ArchivePage() {
     }
     setMsg(t("archive.saveIdentity") + " — OK");
     await load();
+  }
+
+  async function onIdentityImagePick(key: "idPhotoUrl" | "portraitUrl", e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setImageUploadBusy(true);
+    setMsg(null);
+    try {
+      const url = await uploadImageFile(f);
+      patchIdentity(key, url);
+      setMsg(t("archive.imageUploadOk"));
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setImageUploadBusy(false);
+    }
+  }
+
+  async function onAwardProofPick(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setImageUploadBusy(true);
+    setMsg(null);
+    try {
+      const url = await uploadImageFile(f);
+      setAwardProof(url);
+      setMsg(t("archive.imageUploadOk"));
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setImageUploadBusy(false);
+    }
   }
 
   function patchIdentity<K extends IdentityField>(key: K, value: string) {
@@ -479,6 +518,55 @@ export default function ArchivePage() {
           {IDENTITY_FIELDS.map((key) => {
             const val = identity[key];
             const err = identityErrors.has(key);
+            if (key === "idPhotoUrl" || key === "portraitUrl") {
+              return (
+                <label key={key} className="flex flex-col gap-1 text-sm sm:col-span-2">
+                  <span>
+                    {t(`archive.identityLabels.${key}` as "archive.identityLabels.nationality")}
+                    <span className="text-destructive" aria-hidden>
+                      {" "}
+                      *
+                    </span>
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      ref={key === "idPhotoUrl" ? idPhotoFileRef : portraitFileRef}
+                      onChange={(e) => void onIdentityImagePick(key, e)}
+                    />
+                    <input
+                      className={
+                        err
+                          ? `${inputClass} min-w-[12rem] flex-1 border-destructive ring-1 ring-destructive/30`
+                          : `${inputClass} min-w-[12rem] flex-1`
+                      }
+                      value={val}
+                      onChange={(e) => patchIdentity(key, e.target.value)}
+                      aria-invalid={err}
+                    />
+                    <button
+                      type="button"
+                      disabled={imageUploadBusy}
+                      className="rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                      onClick={() =>
+                        (key === "idPhotoUrl" ? idPhotoFileRef : portraitFileRef).current?.click()
+                      }
+                    >
+                      {t("uploadImage")}
+                    </button>
+                  </div>
+                  {val.trim().length > 0 ? (
+                    <img
+                      src={val}
+                      alt=""
+                      className="mt-1 h-28 max-w-xs rounded border border-border object-contain"
+                    />
+                  ) : null}
+                </label>
+              );
+            }
             return (
               <label key={key} className="flex flex-col gap-1 text-sm">
                 <span>
@@ -633,26 +721,42 @@ export default function ArchivePage() {
             </li>
           ))}
         </ul>
-        <div className="flex flex-wrap gap-2">
-          <input
-            className={`${inputClass} max-w-xs flex-1`}
-            placeholder={t("archive.awardTitle")}
-            value={awardTitle}
-            onChange={(e) => setAwardTitle(e.target.value)}
-          />
-          <input
-            className={`${inputClass} max-w-md flex-1`}
-            placeholder={t("archive.proofUrl")}
-            value={awardProof}
-            onChange={(e) => setAwardProof(e.target.value)}
-          />
-          <button
-            type="button"
-            onClick={() => void submitAward()}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-          >
-            {t("archive.submitAward")}
-          </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            <input
+              className={`${inputClass} max-w-xs flex-1`}
+              placeholder={t("archive.awardTitle")}
+              value={awardTitle}
+              onChange={(e) => setAwardTitle(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input type="file" accept="image/*" className="hidden" ref={awardProofFileRef} onChange={(e) => void onAwardProofPick(e)} />
+            <input
+              className={`${inputClass} max-w-md min-w-[12rem] flex-1`}
+              placeholder={t("archive.proofUrl")}
+              value={awardProof}
+              onChange={(e) => setAwardProof(e.target.value)}
+            />
+            <button
+              type="button"
+              disabled={imageUploadBusy}
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm"
+              onClick={() => awardProofFileRef.current?.click()}
+            >
+              {t("uploadImage")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void submitAward()}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              {t("archive.submitAward")}
+            </button>
+          </div>
+          {awardProof.trim().length > 0 ? (
+            <img src={awardProof} alt="" className="h-24 max-w-xs rounded border object-contain" />
+          ) : null}
         </div>
       </section>
 

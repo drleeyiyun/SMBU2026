@@ -113,13 +113,13 @@ describe("mergeTimelineSources", () => {
     expect(row.meta).toMatchObject({ category: "volunteer" });
   });
 
-  it("includes org_timeline with kind and org in meta", () => {
+  it("includes org_activity with kind and org in meta", () => {
     const merged = mergeTimelineSources({
       schedule: [],
       plans: [],
       orgTasks: [],
       leagueCoordination: [],
-      orgTimeline: [
+      orgActivities: [
         {
           id: "e1",
           orgId: "0192a000-0000-7000-8000-000000000099",
@@ -133,7 +133,7 @@ describe("mergeTimelineSources", () => {
       ],
     });
     expect(merged).toHaveLength(1);
-    expect(merged[0]!.sourceType).toBe("org_timeline");
+    expect(merged[0]!.sourceType).toBe("org_activity");
     expect(merged[0]!.meta).toMatchObject({
       kind: "meeting",
       orgNameShort: "摄影社",

@@ -119,6 +119,11 @@ export const orgMemberships = pgTable(
 );
 
 export const taskKindEnum = pgEnum("org_task_kind", ["single", "cross", "transfer"]);
+export const orgTaskTimelineAudienceEnum = pgEnum("org_task_timeline_audience", [
+  "assignees_only",
+  "org_members",
+  "all_students",
+]);
 export const taskAssignStatusEnum = pgEnum("task_assign_status", [
   "unread",
   "read",
@@ -136,6 +141,9 @@ export const orgTasks = pgTable("org_tasks", {
   kind: taskKindEnum("kind").notNull(),
   createdByUserId: uuid("created_by_user_id").references(() => users.id),
   leagueVisible: boolean("league_visible").notNull().default(true),
+  timelineAudience: orgTaskTimelineAudienceEnum("timeline_audience")
+    .notNull()
+    .default("assignees_only"),
   startsAt: timestamp("starts_at", { withTimezone: true }),
   endsAt: timestamp("ends_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

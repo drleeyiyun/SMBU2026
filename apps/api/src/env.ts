@@ -12,6 +12,11 @@ const envSchema = z.object({
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().optional(),
   ),
+  UPLOAD_DIR: z.string().default("data/uploads"),
+  PUBLIC_ASSET_BASE: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().url().optional(),
+  ),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -28,6 +33,8 @@ export function loadEnv(): Env {
     PORT: process.env.PORT,
     SCHOOL_API_MODE: process.env.SCHOOL_API_MODE,
     CORS_ORIGIN: process.env.CORS_ORIGIN,
+    UPLOAD_DIR: process.env.UPLOAD_DIR,
+    PUBLIC_ASSET_BASE: process.env.PUBLIC_ASSET_BASE,
   });
   if (!parsed.success) {
     console.error(parsed.error.flatten().fieldErrors);
