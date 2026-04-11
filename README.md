@@ -43,6 +43,19 @@ Compose 服务说明：
 | 社团负责人 Org leader | `leader@demo.school` |
 | 团委/联盟管理员 League admin | `league@demo.school` |
 | 指导老师 Instructor | `instructor@demo.school` |
+| 额外学生（青协骨干，可登录） | `student-amy@demo.school` |
+| 额外学生（仅学生角色、未加入社团，便于测试指派检索） | `student-bob@demo.school` |
+| 额外指导老师 | `instructor-chen@demo.school`、`instructor-ding@demo.school` |
+
+---
+
+## API integration & data entry / API 接入与数据录入
+
+- **前端如何连 API：** `apps/web` 在开发模式下用 Vite 将一组前缀（`/auth`、`/me`、`/tasks`、`/league` 等，见 `apps/web/vite.config.ts`）**代理**到后端，默认目标为 `http://localhost:3000`。生产或 Docker 下由 **Nginx** 把相同路径转发到 `api` 容器。浏览器始终访问**同源**路径（如 `/auth/login`），不手写完整 API 域名。
+- **认证：** `POST /auth/login`（JSON：`email`、`password`），成功后在 **HttpOnly Cookie** 中写入会话；后续 `fetch` 需 `credentials: "include"`（前端封装已处理）。`GET /me` 返回当前用户与角色。
+- **如何录入数据：**
+  - **演示库重置：** 配置好 `DATABASE_URL` 后执行 `pnpm db:migrate`，再执行 **`pnpm db:seed`**。种子脚本会清空业务表并写入演示用户、社团、任务、时间轴缓存等（可反复执行，**仅适用于开发库**）。
+  - **日常增量：** 使用各页面功能（注册流程若未开放则依赖种子用户登录后操作），或直接调用对应 REST接口（需携带会话 Cookie或后续若开放的服务端密钥）。
 
 ---
 

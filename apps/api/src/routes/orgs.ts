@@ -14,6 +14,7 @@ import {
   userRoles,
   users,
 } from "db/schema";
+import { advisorDisplayNameByUserIds } from "../lib/org-advisor-names.js";
 import { broadcastOrgTaskRefreshForTask } from "../lib/org-task-broadcast.js";
 import { broadcastTimelineRefresh } from "../lib/timeline-broadcast.js";
 import type { AuthVariables } from "../middleware/session.js";
@@ -69,7 +70,7 @@ const taskCreateSchema = z
   })
   .strict();
 
-function orgToJson(o: typeof organizations.$inferSelect) {
+function orgToJson(o: typeof organizations.$inferSelect, advisorDisplayName: string | null = null) {
   return {
     id: o.id,
     nameFull: o.nameFull,
@@ -78,6 +79,7 @@ function orgToJson(o: typeof organizations.$inferSelect) {
     orgType: o.orgType,
     lifecycleStatus: o.lifecycleStatus,
     advisorUserId: o.advisorUserId,
+    advisorDisplayName,
     createdAt: o.createdAt.toISOString(),
   };
 }
@@ -277,7 +279,7 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
 
     return c.json(
       {
-        organization: orgToJson(result.org),
+        organization: orgToJson(result.org, null),
         revisionId: result.revisionId,
       },
       201,
@@ -290,7 +292,12 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
       .where(eq(organizations.lifecycleStatus, "active"))
       .orderBy(asc(organizations.nameShort));
 
-    return c.json({ organizations: rows.map(orgToJson) });
+    const nameMap = await advisorDisplayNameByUserIds(rows.map((r) => r.advisorUserId));
+    return c.json({
+      organizations: rows.map((o) =>
+        orgToJson(o, o.advisorUserId ? nameMap.get(o.advisorUserId) ?? null : null),
+      ),
+    });
   })
   .get("/:orgId", requireUser, async (c) => {
     const orgId = c.req.param("orgId");
@@ -305,7 +312,13 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
     if (!org) {
       return c.json({ error: "Organization not found" }, 404);
     }
-    return c.json({ organization: orgToJson(org) });
+    const advMap = await advisorDisplayNameByUserIds([org.advisorUserId]);
+    return c.json({
+      organization: orgToJson(
+        org,
+        org.advisorUserId ? advMap.get(org.advisorUserId) ?? null : null,
+      ),
+    });
   })
   .patch("/:orgId", requireUser, async (c) => {
     const orgId = c.req.param("orgId");
@@ -458,8 +471,14 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
       .where(eq(orgRevisions.id, revisionId))
       .limit(1);
 
+    const advMapRev = await advisorDisplayNameByUserIds([updatedOrg!.advisorUserId]);
     return c.json({
-      organization: orgToJson(updatedOrg!),
+      organization: orgToJson(
+        updatedOrg!,
+        updatedOrg!.advisorUserId
+          ? advMapRev.get(updatedOrg!.advisorUserId) ?? null
+          : null,
+      ),
       revision: {
         id: updatedRev!.id,
         orgId: updatedRev!.orgId,
@@ -502,7 +521,13 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
     }
     const prevAdvisorId = org.advisorUserId;
     if (prevAdvisorId === advisorUserId || (prevAdvisorId === null && advisorUserId === null)) {
-      return c.json({ organization: orgToJson(org) });
+      const advMapUnchanged = await advisorDisplayNameByUserIds([org.advisorUserId]);
+      return c.json({
+        organization: orgToJson(
+          org,
+          org.advisorUserId ? advMapUnchanged.get(org.advisorUserId) ?? null : null,
+        ),
+      });
     }
 
     await db.transaction(async (tx) => {
@@ -522,7 +547,13 @@ export const orgsRouter = new Hono<{ Variables: AuthVariables }>()
     });
 
     const [updated] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
-    return c.json({ organization: orgToJson(updated!) });
+    const advMapDone = await advisorDisplayNameByUserIds([updated!.advisorUserId]);
+    return c.json({
+      organization: orgToJson(
+        updated!,
+        updated!.advisorUserId ? advMapDone.get(updated!.advisorUserId) ?? null : null,
+      ),
+    });
   })
   .get("/:orgId/leadership-events", requireUser, async (c) => {
     const orgId = c.req.param("orgId");

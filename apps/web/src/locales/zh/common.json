@@ -205,7 +205,7 @@
     "pickInstructorTitle": "在下列名单中选择指导老师",
     "instructorSearchBrowse": "按姓名或邮箱筛选…",
     "pickInstructorEmpty": "无匹配教师",
-    "advisorSelectedHint": "当前已选：{{id}}（点保存生效）",
+    "advisorSelectedHint": "当前已选：{{name}}（点保存生效）",
     "advisorNone": "尚未从名单中选择指导老师",
     "memberSelectedHint": "当前选中：{{label}}",
     "memberPickHint": "搜索并点击一行选择要添加的成员",

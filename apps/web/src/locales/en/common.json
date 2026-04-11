@@ -205,7 +205,7 @@
     "pickInstructorTitle": "Pick an advisor from the list",
     "instructorSearchBrowse": "Filter by name or email…",
     "pickInstructorEmpty": "No matching instructors",
-    "advisorSelectedHint": "Selected: {{id}} (Save to apply)",
+    "advisorSelectedHint": "Selected: {{name}} (Save to apply)",
     "advisorNone": "No advisor selected from the list yet",
     "memberSelectedHint": "Selected: {{label}}",
     "memberPickHint": "Search and click a row to choose a member to add",

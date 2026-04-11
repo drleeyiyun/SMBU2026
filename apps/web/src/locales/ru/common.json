@@ -205,7 +205,7 @@
     "pickInstructorTitle": "Выберите куратора из списка",
     "instructorSearchBrowse": "Фильтр по имени или email…",
     "pickInstructorEmpty": "Преподаватели не найдены",
-    "advisorSelectedHint": "Выбрано: {{id}} (сохраните)",
+    "advisorSelectedHint": "Выбрано: {{name}} (сохраните)",
     "advisorNone": "Куратор из списка не выбран",
     "memberSelectedHint": "Выбрано: {{label}}",
     "memberPickHint": "Найдите и нажмите строку, чтобы выбрать участника",

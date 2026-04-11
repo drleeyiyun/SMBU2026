@@ -51,7 +51,16 @@ async function main(): Promise<void> {
     await tx.delete(schema.userRoles);
     await tx.delete(schema.users);
 
-    const [student, leader, league, instructor] = await tx
+    const [
+      student,
+      leader,
+      league,
+      instructor,
+      studentAmy,
+      studentBob,
+      instructorChen,
+      instructorDing,
+    ] = await tx
       .insert(schema.users)
       .values([
         {
@@ -78,10 +87,43 @@ async function main(): Promise<void> {
           displayName: "Demo Instructor",
           preferredLocale: "zh",
         },
+        {
+          email: "student-amy@demo.school",
+          passwordHash,
+          displayName: "演示学生 Amy",
+          preferredLocale: "zh",
+        },
+        {
+          email: "student-bob@demo.school",
+          passwordHash,
+          displayName: "演示学生 Bob",
+          preferredLocale: "zh",
+        },
+        {
+          email: "instructor-chen@demo.school",
+          passwordHash,
+          displayName: "演示教师 陈老师",
+          preferredLocale: "zh",
+        },
+        {
+          email: "instructor-ding@demo.school",
+          passwordHash,
+          displayName: "演示教师 丁老师",
+          preferredLocale: "zh",
+        },
       ])
       .returning();
 
-    if (!student || !leader || !league || !instructor) {
+    if (
+      !student ||
+      !leader ||
+      !league ||
+      !instructor ||
+      !studentAmy ||
+      !studentBob ||
+      !instructorChen ||
+      !instructorDing
+    ) {
       throw new Error("Failed to insert demo users");
     }
 
@@ -92,6 +134,11 @@ async function main(): Promise<void> {
       { userId: leader.id, role: "org_officer" },
       { userId: league.id, role: "league_admin" },
       { userId: instructor.id, role: "instructor" },
+      { userId: studentAmy.id, role: "student" },
+      { userId: studentAmy.id, role: "org_member" },
+      { userId: studentBob.id, role: "student" },
+      { userId: instructorChen.id, role: "instructor" },
+      { userId: instructorDing.id, role: "instructor" },
     ]);
 
     const [primaryOrg, secondOrg] = await tx
@@ -120,34 +167,85 @@ async function main(): Promise<void> {
     await tx.insert(schema.orgMemberships).values([
       { orgId: primaryOrg.id, userId: leader.id, title: "主席" },
       { orgId: primaryOrg.id, userId: student.id, title: "部员" },
+      { orgId: secondOrg.id, userId: studentAmy.id, title: "骨干" },
     ]);
 
-    await tx.insert(schema.studentProfiles).values({
-      userId: student.id,
-      studentNo: "2024001001",
-      volunteerNumber: "V20260001",
-      nationality: "中国",
-      idNumber: "440300200501011234",
-      grade: "2024级本科",
-      department: "计算数学与控制系",
-      major: "计算机科学与技术",
-      className: "计科2024-1班",
-      idPhotoUrl: "https://files.demo.school/seed/id-photo.png",
-      portraitUrl: "https://files.demo.school/seed/portrait.png",
-      phone: "13800138000",
-      basicI18nPublished: {
-        name: { zh: "演示学生", en: "Demo Student", ru: "Демо Студент" },
-        phone: { zh: "13800138000", en: "13800138000", ru: "13800138000" },
-        wechat: { zh: "demo_wx", en: "demo_wx", ru: "demo_wx" },
-        email: {
-          zh: "student@demo.school",
-          en: "student@demo.school",
-          ru: "student@demo.school",
+    await tx.insert(schema.studentProfiles).values([
+      {
+        userId: student.id,
+        studentNo: "2024001001",
+        volunteerNumber: "V20260001",
+        nationality: "中国",
+        idNumber: "440300200501011234",
+        grade: "2024级本科",
+        department: "计算数学与控制系",
+        major: "计算机科学与技术",
+        className: "计科2024-1班",
+        idPhotoUrl: "https://files.demo.school/seed/id-photo.png",
+        portraitUrl: "https://files.demo.school/seed/portrait.png",
+        phone: "13800138000",
+        basicI18nPublished: {
+          name: { zh: "演示学生", en: "Demo Student", ru: "Демо Студент" },
+          phone: { zh: "13800138000", en: "13800138000", ru: "13800138000" },
+          wechat: { zh: "demo_wx", en: "demo_wx", ru: "demo_wx" },
+          email: {
+            zh: "student@demo.school",
+            en: "student@demo.school",
+            ru: "student@demo.school",
+          },
+          github: { zh: "demo-student", en: "demo-student", ru: "demo-student" },
+          weibo: { zh: "demo_weibo", en: "demo_weibo", ru: "demo_weibo" },
         },
-        github: { zh: "demo-student", en: "demo-student", ru: "demo-student" },
-        weibo: { zh: "demo_weibo", en: "demo_weibo", ru: "demo_weibo" },
       },
-    });
+      {
+        userId: studentAmy.id,
+        studentNo: "2024001002",
+        volunteerNumber: "V20260002",
+        nationality: "中国",
+        idNumber: "440300200502021234",
+        grade: "2024级本科",
+        department: "计算数学与控制系",
+        major: "计算机科学与技术",
+        className: "计科2024-2班",
+        phone: "13800138001",
+        basicI18nPublished: {
+          name: { zh: "演示学生 Amy", en: "Amy Demo", ru: "Эми Демо" },
+          phone: { zh: "13800138001", en: "13800138001", ru: "13800138001" },
+          wechat: { zh: "amy_demo", en: "amy_demo", ru: "amy_demo" },
+          email: {
+            zh: "student-amy@demo.school",
+            en: "student-amy@demo.school",
+            ru: "student-amy@demo.school",
+          },
+          github: { zh: "", en: "", ru: "" },
+          weibo: { zh: "", en: "", ru: "" },
+        },
+      },
+      {
+        userId: studentBob.id,
+        studentNo: "2024001003",
+        volunteerNumber: "V20260003",
+        nationality: "中国",
+        idNumber: "440300200503031234",
+        grade: "2024级本科",
+        department: "经济系",
+        major: "国际经济与贸易",
+        className: "国贸2024-1班",
+        phone: "13800138002",
+        basicI18nPublished: {
+          name: { zh: "演示学生 Bob", en: "Bob Demo", ru: "Боб Демо" },
+          phone: { zh: "13800138002", en: "13800138002", ru: "13800138002" },
+          wechat: { zh: "bob_demo", en: "bob_demo", ru: "bob_demo" },
+          email: {
+            zh: "student-bob@demo.school",
+            en: "student-bob@demo.school",
+            ru: "student-bob@demo.school",
+          },
+          github: { zh: "", en: "", ru: "" },
+          weibo: { zh: "", en: "", ru: "" },
+        },
+      },
+    ]);
 
     await tx.insert(schema.volunteerRecords).values([
       {

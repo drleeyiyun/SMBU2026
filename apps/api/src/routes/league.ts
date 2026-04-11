@@ -14,6 +14,7 @@ import {
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
+import { advisorDisplayNameByUserIds } from "../lib/org-advisor-names.js";
 import { leagueArchiveRouter } from "./league-archive.js";
 import { coordinationRouter } from "./league-coordination.js";
 
@@ -81,6 +82,8 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
       .where(conds.length ? and(...conds) : undefined)
       .orderBy(asc(organizations.nameShort));
 
+    const advMap = await advisorDisplayNameByUserIds(rows.map((r) => r.advisorUserId));
+
     return c.json({
       organizations: rows.map((o) => ({
         id: o.id,
@@ -90,6 +93,7 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
         orgType: o.orgType,
         lifecycleStatus: o.lifecycleStatus,
         advisorUserId: o.advisorUserId,
+        advisorDisplayName: o.advisorUserId ? advMap.get(o.advisorUserId) ?? null : null,
         createdAt: o.createdAt.toISOString(),
       })),
     });

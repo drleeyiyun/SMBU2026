@@ -33,8 +33,24 @@ type OrgJson = {
   orgType: string;
   lifecycleStatus: string;
   advisorUserId: string | null;
+  advisorDisplayName?: string | null;
   createdAt: string;
 };
+
+function advisorSelectionLabel(
+  advisorField: string,
+  orgDetail: OrgJson | null,
+  instrHits: Array<{ id: string; displayName: string }>,
+): string | null {
+  const id = advisorField.trim();
+  if (!id) return null;
+  if (orgDetail?.advisorUserId === id && orgDetail.advisorDisplayName) {
+    return orgDetail.advisorDisplayName;
+  }
+  const hit = instrHits.find((h) => h.id === id);
+  if (hit) return hit.displayName;
+  return `${id.slice(0, 8)}…`;
+}
 
 type RevisionRow = {
   id: string;
@@ -625,6 +641,11 @@ export default function OrgManagePage() {
     );
   }, [directoryOrgs, orgPickSearch]);
 
+  const advisorLabelPreview = useMemo(
+    () => advisorSelectionLabel(advisorField, orgDetail, instrHits),
+    [advisorField, orgDetail, instrHits],
+  );
+
   const toggleInvolvedOrg = (orgIdToggle: string) => {
     setInvolvedOrgIds((prev) => {
       if (prev.includes(orgIdToggle)) {
@@ -726,8 +747,13 @@ export default function OrgManagePage() {
                     <dt className="text-muted-foreground">{t("orgManage.createdAtLabel")}</dt>
                     <dd className="font-medium">{formatDisplayDateTime(o.createdAt)}</dd>
                     <dt className="text-muted-foreground">{t("orgManage.advisorIdLabel")}</dt>
-                    <dd className="truncate font-mono text-[11px]" title={o.advisorUserId ?? ""}>
-                      {o.advisorUserId ? `${o.advisorUserId.slice(0, 8)}…` : "—"}
+                    <dd
+                      className="truncate text-xs"
+                      title={o.advisorUserId ? `${o.advisorDisplayName ?? ""} · ${o.advisorUserId}` : ""}
+                    >
+                      {o.advisorUserId
+                        ? o.advisorDisplayName ?? `${o.advisorUserId.slice(0, 8)}…`
+                        : "—"}
                     </dd>
                   </dl>
                   <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
@@ -1066,10 +1092,8 @@ export default function OrgManagePage() {
               <div>
                 <h3 className="mb-2 font-medium">{t("orgManage.advisor")}</h3>
                 <p className="mb-2 text-xs text-muted-foreground">
-                  {advisorField.trim()
-                    ? t("orgManage.advisorSelectedHint", {
-                        id: advisorField.trim().slice(0, 8) + "…",
-                      })
+                  {advisorLabelPreview
+                    ? t("orgManage.advisorSelectedHint", { name: advisorLabelPreview })
                     : t("orgManage.advisorNone")}
                 </p>
                 <div className="mb-3 flex flex-wrap items-center gap-2">
