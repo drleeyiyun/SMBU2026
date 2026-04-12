@@ -1,6 +1,14 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "db";
-import { abilityTags, awards, studentProfiles, volunteerRecords } from "db/schema";
+import {
+  abilityTags,
+  awards,
+  leagueCoordinationEvents,
+  studentProfiles,
+  studentVolunteerEventClaims,
+  volunteerRecords,
+} from "db/schema";
+import { resolveVolunteerHoursForClaim } from "./archive-volunteer-sync.js";
 import {
   groupAbilityTags,
   identityCompleteEffective,
@@ -56,6 +64,48 @@ export async function fetchStudentArchiveDetail(userId: string) {
     .where(eq(volunteerRecords.volunteerNumber, profile.volunteerNumber))
     .orderBy(asc(volunteerRecords.occurredAt));
 
+  const claimRows = await db
+    .select({
+      coordinationEventId: studentVolunteerEventClaims.coordinationEventId,
+      claimedHours: studentVolunteerEventClaims.claimedHours,
+      auditStatus: studentVolunteerEventClaims.auditStatus,
+      rejectReason: studentVolunteerEventClaims.rejectReason,
+      createdAt: studentVolunteerEventClaims.createdAt,
+      eventTitle: leagueCoordinationEvents.title,
+      eventStartsAt: leagueCoordinationEvents.startsAt,
+      eventEndsAt: leagueCoordinationEvents.endsAt,
+      defaultVolunteerHours: leagueCoordinationEvents.defaultVolunteerHours,
+    })
+    .from(studentVolunteerEventClaims)
+    .innerJoin(
+      leagueCoordinationEvents,
+      eq(studentVolunteerEventClaims.coordinationEventId, leagueCoordinationEvents.id),
+    )
+    .where(
+      and(
+        eq(studentVolunteerEventClaims.userId, userId),
+        eq(leagueCoordinationEvents.category, "volunteer"),
+      ),
+    )
+    .orderBy(desc(studentVolunteerEventClaims.createdAt));
+
+  const volunteerClaimsOut = claimRows.map((r) => ({
+    coordinationEventId: r.coordinationEventId,
+    eventTitle: r.eventTitle,
+    claimedHours:
+      r.claimedHours !== null && r.claimedHours !== undefined
+        ? Number.parseFloat(String(r.claimedHours))
+        : null,
+    resolvedHours: resolveVolunteerHoursForClaim(r.claimedHours, {
+      startsAt: r.eventStartsAt,
+      endsAt: r.eventEndsAt,
+      defaultVolunteerHours: r.defaultVolunteerHours,
+    }),
+    auditStatus: r.auditStatus,
+    rejectReason: r.rejectReason,
+    createdAt: r.createdAt.toISOString(),
+  }));
+
   const volunteerRecordsOut = vr.map((r) => ({
     id: r.id,
     title: r.title,
@@ -92,6 +142,7 @@ export async function fetchStudentArchiveDetail(userId: string) {
     volunteerSummary: {
       totalHours: sumVolunteerHours(vr),
       records: volunteerRecordsOut,
+      claims: volunteerClaimsOut,
     },
   };
 }

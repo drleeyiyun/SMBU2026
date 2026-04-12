@@ -283,9 +283,8 @@ export const volunteerRecords = pgTable(
   },
   (t) => [
     index("vr_volunteer_number_idx").on(t.volunteerNumber),
-    uniqueIndex("vr_volunteer_external_uidx")
-      .on(t.volunteerNumber, t.externalRef)
-      .where(sql`${t.externalRef} IS NOT NULL`),
+    /** Full (not partial) unique index so `ON CONFLICT (volunteer_number, external_ref)` can arbitrate; multiple NULL `external_ref` rows remain allowed in PostgreSQL. */
+    uniqueIndex("vr_volunteer_external_uidx").on(t.volunteerNumber, t.externalRef),
   ]
 );
 
@@ -346,6 +345,12 @@ export const coordinationCategoryEnum = pgEnum("coordination_category", [
   "general",
 ]);
 
+export const volunteerClaimAuditStatusEnum = pgEnum("volunteer_claim_audit_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
 export const leagueCoordinationEvents = pgTable(
   "league_coordination_events",
   {
@@ -355,6 +360,8 @@ export const leagueCoordinationEvents = pgTable(
     category: coordinationCategoryEnum("category").notNull().default("general"),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    /** Hours used when a student claims without optional reported hours (before duration fallback). */
+    defaultVolunteerHours: numeric("default_volunteer_hours", { precision: 8, scale: 2 }),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -404,6 +411,10 @@ export const studentVolunteerEventClaims = pgTable(
       .notNull()
       .references(() => leagueCoordinationEvents.id, { onDelete: "cascade" }),
     claimedHours: numeric("claimed_hours", { precision: 8, scale: 2 }),
+    auditStatus: volunteerClaimAuditStatusEnum("audit_status").notNull().default("pending"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewerUserId: uuid("reviewer_user_id").references(() => users.id, { onDelete: "set null" }),
+    rejectReason: text("reject_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.coordinationEventId] })],

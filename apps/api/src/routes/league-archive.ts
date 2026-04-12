@@ -1,7 +1,15 @@
 import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod";
 import { db } from "db";
-import { awards, notifications, studentProfiles, users } from "db/schema";
+import {
+  awards,
+  leagueCoordinationEvents,
+  notifications,
+  studentProfiles,
+  studentVolunteerEventClaims,
+  users,
+} from "db/schema";
 import {
   parseBasicI18n,
   parseIdentityDraft,
@@ -11,6 +19,24 @@ import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
 import { fetchStudentArchiveDetail } from "../services/student-archive-read.js";
+import {
+  deleteVolunteerRecordForCoordination,
+  resolveVolunteerHoursForClaim,
+  syncVolunteerRecordsForUser,
+} from "../services/archive-volunteer-sync.js";
+
+const volunteerClaimReviewSchema = z
+  .object({
+    userId: z.string().uuid(),
+    coordinationEventId: z.string().uuid(),
+    action: z.enum(["approve", "reject"]),
+    reason: z.string().optional(),
+  })
+  .strict();
+
+async function parseJsonBody(c: { req: { json: () => Promise<unknown> } }): Promise<unknown | null> {
+  return c.req.json().catch(() => null);
+}
 
 function isUuid(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -240,6 +266,121 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
         studentNo: r.studentNo,
       })),
     });
+  })
+  .get("/volunteer-claims/pending", requireUser, requireRoles("league_admin"), async (c) => {
+    const rows = await db
+      .select({
+        userId: studentVolunteerEventClaims.userId,
+        coordinationEventId: studentVolunteerEventClaims.coordinationEventId,
+        claimedHours: studentVolunteerEventClaims.claimedHours,
+        createdAt: studentVolunteerEventClaims.createdAt,
+        eventTitle: leagueCoordinationEvents.title,
+        eventStartsAt: leagueCoordinationEvents.startsAt,
+        eventEndsAt: leagueCoordinationEvents.endsAt,
+        defaultVolunteerHours: leagueCoordinationEvents.defaultVolunteerHours,
+        displayName: users.displayName,
+        studentNo: studentProfiles.studentNo,
+        volunteerNumber: studentProfiles.volunteerNumber,
+      })
+      .from(studentVolunteerEventClaims)
+      .innerJoin(
+        leagueCoordinationEvents,
+        eq(studentVolunteerEventClaims.coordinationEventId, leagueCoordinationEvents.id),
+      )
+      .innerJoin(users, eq(studentVolunteerEventClaims.userId, users.id))
+      .innerJoin(studentProfiles, eq(studentProfiles.userId, studentVolunteerEventClaims.userId))
+      .where(eq(studentVolunteerEventClaims.auditStatus, "pending"))
+      .orderBy(desc(studentVolunteerEventClaims.createdAt));
+
+    return c.json({
+      items: rows.map((r) => ({
+        userId: r.userId,
+        coordinationEventId: r.coordinationEventId,
+        eventTitle: r.eventTitle,
+        claimedHours:
+          r.claimedHours !== null && r.claimedHours !== undefined
+            ? Number.parseFloat(String(r.claimedHours))
+            : null,
+        resolvedHours: resolveVolunteerHoursForClaim(r.claimedHours, {
+          startsAt: r.eventStartsAt,
+          endsAt: r.eventEndsAt,
+          defaultVolunteerHours: r.defaultVolunteerHours,
+        }),
+        createdAt: r.createdAt.toISOString(),
+        studentDisplayName: r.displayName,
+        studentNo: r.studentNo,
+        volunteerNumber: r.volunteerNumber,
+      })),
+    });
+  })
+  .post("/volunteer-claims/review", requireUser, requireRoles("league_admin"), async (c) => {
+    const reviewerId = c.get("userId")!;
+    const raw = await parseJsonBody(c);
+    if (raw === null || typeof raw !== "object") {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const parsed = volunteerClaimReviewSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+    }
+    const { userId, coordinationEventId, action, reason } = parsed.data;
+    const reasonTrim = reason?.trim() ?? "";
+    if (action === "reject" && reasonTrim === "") {
+      return c.json({ error: "reason is required when rejecting" }, 400);
+    }
+
+    const [claim] = await db
+      .select()
+      .from(studentVolunteerEventClaims)
+      .where(
+        and(
+          eq(studentVolunteerEventClaims.userId, userId),
+          eq(studentVolunteerEventClaims.coordinationEventId, coordinationEventId),
+        ),
+      )
+      .limit(1);
+
+    if (!claim) {
+      return c.json({ error: "Claim not found" }, 404);
+    }
+
+    if (claim.auditStatus !== "pending") {
+      return c.json({ error: "Claim is not pending" }, 400);
+    }
+
+    const [profile] = await db
+      .select({ volunteerNumber: studentProfiles.volunteerNumber })
+      .from(studentProfiles)
+      .where(eq(studentProfiles.userId, userId))
+      .limit(1);
+
+    if (!profile) {
+      return c.json({ error: "Student profile not found" }, 404);
+    }
+
+    const now = new Date();
+    await db
+      .update(studentVolunteerEventClaims)
+      .set({
+        auditStatus: action === "approve" ? "approved" : "rejected",
+        reviewedAt: now,
+        reviewerUserId: reviewerId,
+        rejectReason: action === "reject" ? reasonTrim : null,
+      })
+      .where(
+        and(
+          eq(studentVolunteerEventClaims.userId, userId),
+          eq(studentVolunteerEventClaims.coordinationEventId, coordinationEventId),
+        ),
+      );
+
+    if (action === "reject") {
+      await deleteVolunteerRecordForCoordination(profile.volunteerNumber.trim(), coordinationEventId);
+      return c.json({ ok: true });
+    }
+
+    const { upserted } = await syncVolunteerRecordsForUser(userId);
+    return c.json({ ok: true, upserted });
   })
   .get("/audit-log", requireUser, requireRoles("league_admin"), async (c) => {
     const userId = c.req.query("userId");

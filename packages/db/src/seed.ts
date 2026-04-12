@@ -390,6 +390,7 @@ async function main(): Promise<void> {
         category: "volunteer",
         startsAt: volunteerStart,
         endsAt: volunteerEnd,
+        defaultVolunteerHours: "3.00",
         createdByUserId: league.id,
       })
       .returning({ id: schema.leagueCoordinationEvents.id });
@@ -398,6 +399,17 @@ async function main(): Promise<void> {
       await tx.insert(schema.studentVolunteerEventClaims).values({
         userId: student.id,
         coordinationEventId: volunteerCoordinationEvent.id,
+        auditStatus: "approved",
+        reviewedAt: new Date(),
+        reviewerUserId: league.id,
+      });
+      await tx.insert(schema.volunteerRecords).values({
+        volunteerNumber: "V20260001",
+        title: "校园志愿服务协调会",
+        hours: "3.00",
+        source: "coordination",
+        externalRef: volunteerCoordinationEvent.id,
+        occurredAt: volunteerStart,
       });
     }
   });

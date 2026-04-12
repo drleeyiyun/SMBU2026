@@ -68,6 +68,18 @@ type PendingAwardRow = {
   studentNo: string | null;
 };
 
+type PendingVolunteerClaimRow = {
+  userId: string;
+  coordinationEventId: string;
+  eventTitle: string;
+  claimedHours: number | null;
+  resolvedHours: number;
+  createdAt: string;
+  studentDisplayName: string | null;
+  studentNo: string | null;
+  volunteerNumber: string;
+};
+
 type AuditRow = {
   id: string;
   userId: string;
@@ -133,6 +145,15 @@ type ArchiveDetail = {
       externalRef: string | null;
       occurredAt: string;
     }[];
+    claims: {
+      coordinationEventId: string;
+      eventTitle: string;
+      claimedHours: number | null;
+      resolvedHours: number;
+      auditStatus: string;
+      rejectReason: string | null;
+      createdAt: string;
+    }[];
   };
 };
 
@@ -192,6 +213,8 @@ export default function LeagueArchivePage() {
   const [reasonIdentityByUser, setReasonIdentityByUser] = useState<Record<string, string>>({});
   const [reasonByAward, setReasonByAward] = useState<Record<string, string>>({});
   const [pendingAwards, setPendingAwards] = useState<PendingAwardRow[]>([]);
+  const [pendingVolunteerClaims, setPendingVolunteerClaims] = useState<PendingVolunteerClaimRow[]>([]);
+  const [reasonByVolunteerClaim, setReasonByVolunteerClaim] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
 
   const [detail, setDetail] = useState<ArchiveDetail | null>(null);
@@ -214,10 +237,11 @@ export default function LeagueArchivePage() {
     setError(null);
     const q = rosterQRef.current.trim();
     const qs = q ? `?q=${encodeURIComponent(q)}` : "";
-    const [rRes, pRes, piRes, awRes, aRes] = await Promise.all([
+    const [rRes, pRes, piRes, vcRes, awRes, aRes] = await Promise.all([
       apiFetch(`/league/archive/students${qs}`),
       apiFetch("/league/archive/pending"),
       apiFetch("/league/archive/pending-identity"),
+      apiFetch("/league/archive/volunteer-claims/pending"),
       apiFetch("/league/archive/awards/pending"),
       apiFetch("/league/archive/audit-log?limit=30"),
     ]);
@@ -233,6 +257,10 @@ export default function LeagueArchivePage() {
       setError(await readErrorMessage(piRes));
       return;
     }
+    if (!vcRes.ok) {
+      setError(await readErrorMessage(vcRes));
+      return;
+    }
     if (!awRes.ok) {
       setError(await readErrorMessage(awRes));
       return;
@@ -244,11 +272,13 @@ export default function LeagueArchivePage() {
     const rBody = await readJson<{ items: RosterRow[] }>(rRes);
     const pBody = await readJson<{ items: PendingRow[] }>(pRes);
     const piBody = await readJson<{ items: PendingIdentityRow[] }>(piRes);
+    const vcBody = await readJson<{ items: PendingVolunteerClaimRow[] }>(vcRes);
     const awBody = await readJson<{ items: PendingAwardRow[] }>(awRes);
     const aBody = await readJson<{ items: AuditRow[] }>(aRes);
     setRoster(rBody.items);
     setPending(pBody.items);
     setPendingIdentity(piBody.items);
+    setPendingVolunteerClaims(vcBody.items);
     setPendingAwards(awBody.items);
     setAudit(aBody.items);
   }, [allowed]);
@@ -324,6 +354,46 @@ export default function LeagueArchivePage() {
     (k: string) => t(`archive.identityLabels.${k}` as "archive.identityLabels.nationality"),
     [t],
   );
+
+  function volunteerClaimKey(userId: string, coordinationEventId: string) {
+    return `${userId}:${coordinationEventId}`;
+  }
+
+  async function reviewVolunteerClaim(
+    userId: string,
+    coordinationEventId: string,
+    action: "approve" | "reject",
+  ) {
+    setMsg(null);
+    const key = volunteerClaimKey(userId, coordinationEventId);
+    const reason = reasonByVolunteerClaim[key]?.trim() ?? "";
+    if (action === "reject" && !reason) {
+      setMsg(t("leagueArchive.volunteerClaimRejectReason"));
+      return;
+    }
+    const res = await apiFetch("/league/archive/volunteer-claims/review", {
+      method: "POST",
+      body: JSON.stringify({
+        userId,
+        coordinationEventId,
+        action,
+        reason: action === "reject" ? reason : undefined,
+      }),
+    });
+    if (!res.ok) {
+      setMsg(await readErrorMessage(res));
+      return;
+    }
+    setReasonByVolunteerClaim((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    if (detail?.user.id === userId) {
+      await openDetail(userId);
+    }
+    await load();
+  }
 
   async function reviewAward(awardId: string, action: "approve" | "reject") {
     setMsg(null);
@@ -406,6 +476,73 @@ export default function LeagueArchivePage() {
               </button>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-medium">{t("leagueArchive.pendingVolunteerClaims")}</h2>
+        {pendingVolunteerClaims.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("leagueArchive.noPendingVolunteerClaims")}</p>
+        ) : (
+          <ul className="space-y-4">
+            {pendingVolunteerClaims.map((row) => {
+              const ck = volunteerClaimKey(row.userId, row.coordinationEventId);
+              return (
+                <li
+                  key={ck}
+                  className="rounded-lg border border-border bg-background p-4 text-sm shadow-sm"
+                >
+                  <p className="font-medium">{row.eventTitle}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {row.studentDisplayName ?? row.userId.slice(0, 8)} · {t("archive.studentNo")}:{" "}
+                    {row.studentNo ?? "—"} · {t("archive.identityLabels.volunteerNumber")}:{" "}
+                    {row.volunteerNumber} · {formatDisplayDateTime(row.createdAt)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("leagueArchive.volunteerClaimActivityId")}:{" "}
+                    <code className="rounded bg-muted px-1 font-mono text-[11px]">{row.coordinationEventId}</code>
+                  </p>
+                  <p className="mt-1 text-xs">
+                    {t("leagueArchive.volunteerClaimResolved")}: {row.resolvedHours}h
+                    {row.claimedHours != null
+                      ? ` · ${t("leagueArchive.volunteerClaimDeclared")}: ${row.claimedHours}h`
+                      : null}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <input
+                      className="min-w-[200px] flex-1 rounded-md border border-border bg-background px-3 py-2"
+                      placeholder={t("leagueArchive.reason")}
+                      value={reasonByVolunteerClaim[ck] ?? ""}
+                      onChange={(e) =>
+                        setReasonByVolunteerClaim((prev) => ({ ...prev, [ck]: e.target.value }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void reviewVolunteerClaim(row.userId, row.coordinationEventId, "approve")}
+                      className="rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground"
+                    >
+                      {t("leagueArchive.approve")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void reviewVolunteerClaim(row.userId, row.coordinationEventId, "reject")}
+                      className="rounded-md border border-destructive/50 px-3 py-2 font-medium text-destructive"
+                    >
+                      {t("leagueArchive.reject")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void openDetail(row.userId)}
+                      className="rounded-md border border-border px-3 py-2 text-xs"
+                    >
+                      {t("leagueArchive.viewDetail")}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
 

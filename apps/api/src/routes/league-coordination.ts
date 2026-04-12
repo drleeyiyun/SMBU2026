@@ -12,6 +12,10 @@ const isoDate = z.string().datetime({ offset: true }).transform((s) => new Date(
 
 const categoryEnum = z.enum(["practice", "volunteer", "work_study", "general"]);
 
+const defaultVolunteerHoursField = z
+  .union([z.number().min(0).max(1_000_000), z.null()])
+  .optional();
+
 const createCoordinationSchema = z
   .object({
     title: z.string().min(1),
@@ -19,6 +23,7 @@ const createCoordinationSchema = z
     category: categoryEnum,
     startsAt: isoDate,
     endsAt: isoDate,
+    defaultVolunteerHours: defaultVolunteerHoursField,
   })
   .strict();
 
@@ -29,6 +34,7 @@ const patchCoordinationSchema = z
     category: categoryEnum.optional(),
     startsAt: isoDate.optional(),
     endsAt: isoDate.optional(),
+    defaultVolunteerHours: defaultVolunteerHoursField,
   })
   .strict();
 
@@ -46,6 +52,10 @@ function rowToItem(row: typeof leagueCoordinationEvents.$inferSelect) {
     category: row.category as string,
     startsAt: row.startsAt.toISOString(),
     endsAt: row.endsAt.toISOString(),
+    defaultVolunteerHours:
+      row.defaultVolunteerHours === null || row.defaultVolunteerHours === undefined
+        ? null
+        : Number.parseFloat(String(row.defaultVolunteerHours)),
     createdByUserId: row.createdByUserId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -75,10 +85,15 @@ export const coordinationRouter = new Hono<{ Variables: AuthVariables }>()
     if (!parsed.success) {
       return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
     }
-    const { title, description, category, startsAt, endsAt } = parsed.data;
+    const { title, description, category, startsAt, endsAt, defaultVolunteerHours } = parsed.data;
     if (startsAt >= endsAt) {
       return c.json({ error: "startsAt must be before endsAt" }, 400);
     }
+
+    const defaultHoursCol =
+      category === "volunteer" && defaultVolunteerHours != null
+        ? defaultVolunteerHours.toFixed(2)
+        : null;
 
     const [row] = await db
       .insert(leagueCoordinationEvents)
@@ -88,6 +103,7 @@ export const coordinationRouter = new Hono<{ Variables: AuthVariables }>()
         category,
         startsAt,
         endsAt,
+        defaultVolunteerHours: defaultHoursCol,
         createdByUserId: userId,
       })
       .returning();
@@ -142,6 +158,20 @@ export const coordinationRouter = new Hono<{ Variables: AuthVariables }>()
     if (patch.category !== undefined) updateValues.category = patch.category;
     if (patch.startsAt !== undefined) updateValues.startsAt = patch.startsAt;
     if (patch.endsAt !== undefined) updateValues.endsAt = patch.endsAt;
+
+    const nextCategory = patch.category ?? existing.category;
+    if (patch.defaultVolunteerHours !== undefined) {
+      if (nextCategory !== "volunteer") {
+        updateValues.defaultVolunteerHours = null;
+      } else if (patch.defaultVolunteerHours === null) {
+        updateValues.defaultVolunteerHours = null;
+      } else {
+        updateValues.defaultVolunteerHours = patch.defaultVolunteerHours.toFixed(2);
+      }
+    }
+    if (patch.category !== undefined && patch.category !== "volunteer") {
+      updateValues.defaultVolunteerHours = null;
+    }
 
     const [row] = await db
       .update(leagueCoordinationEvents)

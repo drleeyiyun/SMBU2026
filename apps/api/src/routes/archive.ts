@@ -28,7 +28,10 @@ import {
   triPhoneEmailFromBasic,
 } from "../lib/archive-profile-format.js";
 import { broadcastNotification } from "../lib/notification-broadcast.js";
-import { syncVolunteerRecordsForUser } from "../services/archive-volunteer-sync.js";
+import {
+  deleteVolunteerRecordForCoordination,
+  syncVolunteerRecordsForUser,
+} from "../services/archive-volunteer-sync.js";
 import { fetchStudentArchiveDetail } from "../services/student-archive-read.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
@@ -288,13 +291,20 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
     const userId = c.get("userId")!;
 
     const [profile] = await db
-      .select({ userId: studentProfiles.userId })
+      .select({ userId: studentProfiles.userId, volunteerNumber: studentProfiles.volunteerNumber })
       .from(studentProfiles)
       .where(eq(studentProfiles.userId, userId))
       .limit(1);
 
     if (!profile) {
       return c.json({ error: "Student profile not found" }, 404);
+    }
+
+    if (!profile.volunteerNumber.trim()) {
+      return c.json(
+        { error: "Volunteer number is required on your profile before claiming coordination hours" },
+        400,
+      );
     }
 
     const raw = await parseJsonBody(c);
@@ -323,6 +333,27 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: "Event is not a volunteer activity" }, 400);
     }
 
+    const [existingClaim] = await db
+      .select({ auditStatus: studentVolunteerEventClaims.auditStatus })
+      .from(studentVolunteerEventClaims)
+      .where(
+        and(
+          eq(studentVolunteerEventClaims.userId, userId),
+          eq(studentVolunteerEventClaims.coordinationEventId, coordinationEventId),
+        ),
+      )
+      .limit(1);
+
+    if (existingClaim?.auditStatus === "approved") {
+      return c.json(
+        {
+          error:
+            "Coordination claim for this activity is already approved; you cannot submit again.",
+        },
+        400,
+      );
+    }
+
     const hoursVal =
       claimedHours !== undefined ? claimedHours.toFixed(2) : null;
 
@@ -332,6 +363,7 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
         userId,
         coordinationEventId,
         claimedHours: hoursVal,
+        auditStatus: "pending",
       })
       .onConflictDoUpdate({
         target: [
@@ -339,16 +371,18 @@ export const archiveRouter = new Hono<{ Variables: AuthVariables }>()
           studentVolunteerEventClaims.coordinationEventId,
         ],
         set: {
-          claimedHours:
-            claimedHours !== undefined
-              ? sql`excluded.claimed_hours`
-              : sql`${studentVolunteerEventClaims.claimedHours}`,
+          // Always take the incoming row's claimed_hours (NULL when optional field omitted) so a resubmit without hours clears a previous value.
+          claimedHours: sql`excluded.claimed_hours`,
+          auditStatus: sql`'pending'::volunteer_claim_audit_status`,
+          reviewedAt: sql`NULL`,
+          reviewerUserId: sql`NULL`,
+          rejectReason: sql`NULL`,
         },
       });
 
-    const { upserted } = await syncVolunteerRecordsForUser(userId);
+    await deleteVolunteerRecordForCoordination(profile.volunteerNumber.trim(), coordinationEventId);
 
-    return c.json({ ok: true, upserted });
+    return c.json({ ok: true, auditStatus: "pending" as const });
   })
   .post("/volunteer-sync", requireUser, async (c) => {
     const userId = c.get("userId")!;

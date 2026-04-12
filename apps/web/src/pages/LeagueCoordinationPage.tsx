@@ -25,6 +25,7 @@ type CoordinationItem = {
   category: string;
   startsAt: string;
   endsAt: string;
+  defaultVolunteerHours: number | null;
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
@@ -70,6 +71,7 @@ export default function LeagueCoordinationPage() {
   const [endsAtInput, setEndsAtInput] = useState(() =>
     toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)),
   );
+  const [defaultVolunteerHoursInput, setDefaultVolunteerHoursInput] = useState("");
 
   const checkMe = useCallback(async () => {
     const res = await apiFetch("/me");
@@ -114,6 +116,7 @@ export default function LeagueCoordinationPage() {
     setCategory("general");
     setStartsAtInput(toDateTimeLocalValue(now));
     setEndsAtInput(toDateTimeLocalValue(new Date(now.getTime() + 60 * 60 * 1000)));
+    setDefaultVolunteerHoursInput("");
     setEditingId(null);
   }
 
@@ -124,6 +127,20 @@ export default function LeagueCoordinationPage() {
     setCategory((categories.includes(row.category as Category) ? row.category : "general") as Category);
     setStartsAtInput(toDateTimeLocalValue(new Date(row.startsAt)));
     setEndsAtInput(toDateTimeLocalValue(new Date(row.endsAt)));
+    setDefaultVolunteerHoursInput(
+      row.defaultVolunteerHours != null && !Number.isNaN(row.defaultVolunteerHours)
+        ? String(row.defaultVolunteerHours)
+        : "",
+    );
+  }
+
+  async function copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setError(null);
+    } catch {
+      setError(t("leagueCoordination.copyFailed"));
+    }
   }
 
   async function submitCreate(e: FormEvent) {
@@ -144,6 +161,18 @@ export default function LeagueCoordinationPage() {
         endsAt: ends.toISOString(),
       };
       if (description.trim()) body.description = description.trim();
+      if (category === "volunteer") {
+        const rawH = defaultVolunteerHoursInput.trim();
+        if (rawH) {
+          const h = Number.parseFloat(rawH);
+          if (Number.isNaN(h) || h < 0) {
+            setError(t("leagueCoordination.invalidDefaultHours"));
+            setSaving(false);
+            return;
+          }
+          body.defaultVolunteerHours = h;
+        }
+      }
       const res = await apiFetch("/league/coordination-events", {
         method: "POST",
         body: JSON.stringify(body),
@@ -178,6 +207,22 @@ export default function LeagueCoordinationPage() {
         startsAt: starts.toISOString(),
         endsAt: ends.toISOString(),
       };
+      if (category === "volunteer") {
+        const rawH = defaultVolunteerHoursInput.trim();
+        if (rawH) {
+          const h = Number.parseFloat(rawH);
+          if (Number.isNaN(h) || h < 0) {
+            setError(t("leagueCoordination.invalidDefaultHours"));
+            setSaving(false);
+            return;
+          }
+          patch.defaultVolunteerHours = h;
+        } else {
+          patch.defaultVolunteerHours = null;
+        }
+      } else {
+        patch.defaultVolunteerHours = null;
+      }
       const res = await apiFetch(`/league/coordination-events/${editingId}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
@@ -276,6 +321,24 @@ export default function LeagueCoordinationPage() {
               ))}
             </select>
           </label>
+          {category === "volunteer" ? (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">
+                {t("leagueCoordination.defaultVolunteerHours")}
+              </span>
+              <input
+                className={inputClass}
+                type="text"
+                inputMode="decimal"
+                placeholder={t("leagueCoordination.defaultVolunteerHoursPlaceholder")}
+                value={defaultVolunteerHoursInput}
+                onChange={(e) => setDefaultVolunteerHoursInput(e.target.value)}
+              />
+              <span className="text-xs text-muted-foreground">
+                {t("leagueCoordination.defaultVolunteerHoursHint")}
+              </span>
+            </label>
+          ) : null}
           <div className="flex flex-wrap gap-3">
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-muted-foreground">{t("leagueCoordination.startsAt")}</span>
@@ -344,6 +407,26 @@ export default function LeagueCoordinationPage() {
                   <div className="text-xs text-muted-foreground">
                     {t("leagueCoordination.startsAt")}: {formatDisplayDateTime(row.startsAt)} —{" "}
                     {t("leagueCoordination.endsAt")}: {formatDisplayDateTime(row.endsAt)}
+                  </div>
+                  <div className="mt-1 flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+                    <span>
+                      {t("leagueCoordination.activityId")}:{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+                        {row.id}
+                      </code>
+                    </span>
+                    <button
+                      type="button"
+                      className={`${btnGhost} shrink-0 px-2 py-1 text-xs`}
+                      onClick={() => void copyText(row.id)}
+                    >
+                      {t("leagueCoordination.copyActivityId")}
+                    </button>
+                    {row.category === "volunteer" && row.defaultVolunteerHours != null ? (
+                      <span>
+                        {t("leagueCoordination.defaultVolunteerHoursShort")}: {row.defaultVolunteerHours}h
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">

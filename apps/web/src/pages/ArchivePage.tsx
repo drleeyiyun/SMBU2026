@@ -76,6 +76,15 @@ type ArchiveMe = {
       externalRef: string | null;
       occurredAt: string;
     }[];
+    claims: {
+      coordinationEventId: string;
+      eventTitle: string;
+      claimedHours: number | null;
+      resolvedHours: number;
+      auditStatus: "pending" | "approved" | "rejected";
+      rejectReason: string | null;
+      createdAt: string;
+    }[];
   };
 };
 
@@ -379,6 +388,9 @@ export default function ArchivePage() {
       setMsg(await readErrorMessage(res));
       return;
     }
+    setMsg(t("archive.claimSubmittedPending"));
+    setClaimEventId("");
+    setClaimHours("");
     await load();
   }
 
@@ -455,6 +467,13 @@ export default function ArchivePage() {
       management: t("archive.categoryManagement"),
       sports: t("archive.categorySports"),
     })[c];
+
+  const approvedClaimForInput =
+    claimEventId.trim().length > 0
+      ? (data.volunteerSummary.claims ?? []).find(
+          (c) => c.coordinationEventId === claimEventId.trim() && c.auditStatus === "approved",
+        )
+      : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -654,8 +673,59 @@ export default function ArchivePage() {
             </li>
           ))}
         </ul>
+        {(data.volunteerSummary.claims ?? []).length > 0 ? (
+          <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-sm">
+            <p className="mb-2 font-medium">{t("archive.volunteerClaimsTitle")}</p>
+            <ul className="space-y-2">
+              {(data.volunteerSummary.claims ?? []).map((c) => (
+                <li key={c.coordinationEventId} className="border-b border-border/80 pb-2 last:border-0 last:pb-0">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-medium">{c.eventTitle}</span>
+                    <span
+                      className={
+                        c.auditStatus === "pending"
+                          ? "text-amber-700 dark:text-amber-400"
+                          : c.auditStatus === "rejected"
+                            ? "text-destructive"
+                            : "text-muted-foreground"
+                      }
+                    >
+                      {c.auditStatus === "pending"
+                        ? t("archive.claimStatusPending")
+                        : c.auditStatus === "rejected"
+                          ? t("archive.claimStatusRejected")
+                          : t("archive.claimStatusApproved")}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("leagueArchive.volunteerClaimResolved")}: {c.resolvedHours}h
+                    {c.claimedHours != null ? ` · ${t("leagueArchive.volunteerClaimDeclared")}: ${c.claimedHours}h` : null}
+                    {" · "}
+                    {formatDisplayDateTime(c.createdAt)}
+                  </p>
+                  {c.auditStatus === "rejected" && c.rejectReason ? (
+                    <p className="mt-1 text-xs text-destructive">
+                      {t("archive.claimRejectReason")}: {c.rejectReason}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
           <p className="text-sm font-medium">{t("archive.claimTitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("archive.coordinationEventIdHint")}</p>
+          {!data.profile.volunteerNumber?.trim() ? (
+            <p className="text-sm text-amber-700 dark:text-amber-400">{t("archive.claimVolunteerNumberMissing")}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t("archive.claimVolunteerNumberOk", { num: data.profile.volunteerNumber.trim() })}
+            </p>
+          )}
+          {approvedClaimForInput ? (
+            <p className="text-sm text-amber-800 dark:text-amber-200">{t("archive.claimAlreadyApprovedHint")}</p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <input
               className={`${inputClass} max-w-md flex-1`}
@@ -668,11 +738,13 @@ export default function ArchivePage() {
               placeholder={t("archive.claimedHours")}
               value={claimHours}
               onChange={(e) => setClaimHours(e.target.value)}
+              disabled={!!approvedClaimForInput}
             />
             <button
               type="button"
               onClick={() => void submitClaim()}
-              className="rounded-md bg-secondary px-3 py-2 text-sm font-medium"
+              className="rounded-md bg-secondary px-3 py-2 text-sm font-medium disabled:opacity-50"
+              disabled={!!approvedClaimForInput}
             >
               {t("archive.claim")}
             </button>
@@ -684,6 +756,7 @@ export default function ArchivePage() {
               {t("archive.syncVolunteer")}
             </button>
           </div>
+          <p className="text-xs text-muted-foreground">{t("archive.syncVolunteerHint")}</p>
         </div>
       </section>
 

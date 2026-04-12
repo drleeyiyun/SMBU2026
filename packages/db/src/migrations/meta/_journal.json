@@ -64,6 +64,27 @@
       "when": 1776200000000,
       "tag": "0008_schedule_instructor",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776300000000,
+      "tag": "0009_coordination_default_volunteer_hours",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776400000000,
+      "tag": "0010_volunteer_records_conflict_uidx",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776500000000,
+      "tag": "0011_volunteer_claim_audit",
+      "breakpoints": true
     }
   ]
 }
