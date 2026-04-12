@@ -1,10 +1,14 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { isValidFacultyMajorPair, isValidStudentGrade } from "academic-catalog";
 import { db } from "db";
 import { scheduleItemsCache, studentProfiles } from "db/schema";
-import { SCHEDULE_SOURCE_LEAGUE } from "../lib/schedule-source.js";
+import {
+  ACADEMIC_PUBLISH_BATCH_LIKE,
+  SCHEDULE_SOURCE_SCHOOL,
+  academicPublishBatchId,
+} from "../lib/schedule-source.js";
 import { broadcastTimelineRefreshToUserIds } from "../lib/timeline-broadcast.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireRoles } from "../middleware/rbac.js";
@@ -42,8 +46,8 @@ function parseJsonBody(c: { req: { json: () => Promise<unknown> } }): Promise<un
   return c.req.json().catch(() => null);
 }
 
-export const leagueProgramScheduleRouter = new Hono<{ Variables: AuthVariables }>()
-  .use("*", sessionMiddleware, requireUser, requireRoles("league_admin"))
+export const academicProgramScheduleRouter = new Hono<{ Variables: AuthVariables }>()
+  .use("*", sessionMiddleware, requireUser, requireRoles("academic_admin"))
   .post("/publish", async (c) => {
     const raw = await parseJsonBody(c);
     if (raw === null || typeof raw !== "object") {
@@ -92,7 +96,7 @@ export const leagueProgramScheduleRouter = new Hono<{ Variables: AuthVariables }
       .where(cohortConds);
 
     const recipientIds = studentRows.map((r) => r.userId);
-    const batchId = `league-pub:${crypto.randomUUID()}`;
+    const batchId = academicPublishBatchId();
     const fetchedAt = new Date();
 
     if (recipientIds.length === 0) {
@@ -109,12 +113,13 @@ export const leagueProgramScheduleRouter = new Hono<{ Variables: AuthVariables }
     }
 
     if (mode === "replace_cohort") {
+      /** 清空该 cohort 全部教务缓存（含教务下发与门户/Mock 同步行），再写入本次下发。 */
       await db
         .delete(scheduleItemsCache)
         .where(
           and(
             inArray(scheduleItemsCache.userId, recipientIds),
-            eq(scheduleItemsCache.scheduleSource, SCHEDULE_SOURCE_LEAGUE),
+            eq(scheduleItemsCache.scheduleSource, SCHEDULE_SOURCE_SCHOOL),
           ),
         );
     }
@@ -132,7 +137,7 @@ export const leagueProgramScheduleRouter = new Hono<{ Variables: AuthVariables }
           endsAt: new Date(it.endsAt),
           batchId,
           fetchedAt,
-          scheduleSource: SCHEDULE_SOURCE_LEAGUE,
+          scheduleSource: SCHEDULE_SOURCE_SCHOOL,
         });
       }
     }

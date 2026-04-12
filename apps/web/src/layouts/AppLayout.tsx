@@ -14,6 +14,7 @@ export default function AppLayout() {
   const { t, i18n } = useTranslation("common");
   const { user, logout } = useSession();
   const showLeagueCoordination = user?.roles.includes("league_admin") ?? false;
+  const showAcademicProgramSchedule = user?.roles.includes("academic_admin") ?? false;
   const showOrgManage =
     showLeagueCoordination ||
     !!(
@@ -46,10 +47,12 @@ export default function AppLayout() {
                 <NavLink to="/app/league/roster" className={linkClass}>
                   {t("nav.rosterAdmin")}
                 </NavLink>
-                <NavLink to="/app/league/program-schedule" className={linkClass}>
-                  {t("nav.leagueProgramSchedule")}
-                </NavLink>
               </>
+            ) : null}
+            {showAcademicProgramSchedule ? (
+              <NavLink to="/app/academic/program-schedule" className={linkClass}>
+                {t("nav.academicProgramSchedule")}
+              </NavLink>
             ) : null}
             {showOrgManage ? (
               <NavLink to="/app/league/orgs" className={linkClass}>

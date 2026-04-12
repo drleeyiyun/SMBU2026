@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, like, lte, not, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "db";
@@ -6,7 +6,11 @@ import { scheduleItemsCache } from "db/schema";
 import { loadEnv } from "../env.js";
 import type { AuthVariables } from "../middleware/session.js";
 import { requireUser, sessionMiddleware } from "../middleware/session.js";
-import { SCHEDULE_SOURCE_SCHOOL } from "../lib/schedule-source.js";
+import {
+  ACADEMIC_PUBLISH_BATCH_LIKE,
+  SCHEDULE_SOURCE_SCHOOL,
+  schoolSyncBatchId,
+} from "../lib/schedule-source.js";
 import { createSchoolGateway } from "../services/school-gateway.js";
 
 const isoOptional = z
@@ -75,7 +79,26 @@ export const scheduleRouter = new Hono<{ Variables: AuthVariables }>()
       return c.json({ error: message }, 501);
     }
 
-    const batchId = crypto.randomUUID();
+    /**
+     * 每日视图同步只传当天 [from,to)，若仍按「与区间重叠」判断，其它日期的教务课不会命中，Mock 仍会写入。
+     * 只要该用户已有任意教务下发批次，即不再写入门户/Mock 占位课次。
+     */
+    const hasAcademicPublished = await db
+      .select({ id: scheduleItemsCache.id })
+      .from(scheduleItemsCache)
+      .where(
+        and(
+          eq(scheduleItemsCache.userId, userId),
+          eq(scheduleItemsCache.scheduleSource, SCHEDULE_SOURCE_SCHOOL),
+          like(scheduleItemsCache.batchId, ACADEMIC_PUBLISH_BATCH_LIKE),
+        ),
+      )
+      .limit(1);
+    if (hasAcademicPublished.length > 0) {
+      items = [];
+    }
+
+    const batchId = schoolSyncBatchId();
     const fetchedAt = new Date();
 
     await db
@@ -84,6 +107,10 @@ export const scheduleRouter = new Hono<{ Variables: AuthVariables }>()
         and(
           eq(scheduleItemsCache.userId, userId),
           eq(scheduleItemsCache.scheduleSource, SCHEDULE_SOURCE_SCHOOL),
+          or(
+            isNull(scheduleItemsCache.batchId),
+            not(like(scheduleItemsCache.batchId, ACADEMIC_PUBLISH_BATCH_LIKE)),
+          ),
         ),
       );
 

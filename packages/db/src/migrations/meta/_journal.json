@@ -85,6 +85,34 @@
       "when": 1776500000000,
       "tag": "0011_volunteer_claim_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1776600000000,
+      "tag": "0012_unify_schedule_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1776700000000,
+      "tag": "0013_restore_league_schedule_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1776800000000,
+      "tag": "0014_add_academic_admin_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1776900000000,
+      "tag": "0015_unify_academic_schedule_batch",
+      "breakpoints": true
     }
   ]
 }

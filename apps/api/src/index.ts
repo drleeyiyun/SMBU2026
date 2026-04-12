@@ -8,6 +8,7 @@ import { requireUser, sessionMiddleware } from "./middleware/session.js";
 import { archiveRouter } from "./routes/archive.js";
 import { authRouter, me } from "./routes/auth.js";
 import { directoryRouter } from "./routes/directory.js";
+import { academicRouter } from "./routes/academic.js";
 import { leagueRouter } from "./routes/league.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { orgsRouter } from "./routes/orgs.js";
@@ -49,6 +50,8 @@ app.route("/directory", directoryRouter);
 app.route("/tasks", tasksRouter);
 
 app.route("/notifications", notificationsRouter);
+
+app.route("/academic", academicRouter);
 
 app.route("/league", leagueRouter);
 

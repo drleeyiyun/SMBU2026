@@ -21,6 +21,7 @@ export const userRoleEnum = pgEnum("user_role", [
   "org_officer",
   "org_president",
   "league_admin",
+  "academic_admin",
   "instructor",
 ]);
 
@@ -316,7 +317,7 @@ export const scheduleItemsCache = pgTable(
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
     batchId: text("batch_id"),
-    /** school_gateway: 教务同步；league_program: 团委按系别专业下发的课表。 */
+    /** school_gateway：教务同步与教务批量录入；`batch_id` 前缀 academic-pub: 为官方课表，同步不覆盖。 */
     scheduleSource: text("schedule_source").notNull().default("school_gateway"),
   },
   (t) => [index("schedule_user_starts_idx").on(t.userId, t.startsAt)]

@@ -42,6 +42,7 @@ Compose 服务说明：
 | 学生 Student | `student@demo.school` |
 | 社团负责人 Org leader | `leader@demo.school` |
 | 团委/联盟管理员 League admin | `league@demo.school` |
+|教务管理员 Academic admin（课表录入） | `academic@demo.school` |
 | **数据管理员（仅团委权限，用于师生录入演示）** | `dataadmin@demo.school` |
 | 指导老师 Instructor | `instructor@demo.school` |
 | 额外学生（青协骨干，可登录） | `student-amy@demo.school` |
@@ -54,12 +55,12 @@ Compose 服务说明：
 
 ## API integration & data entry / API 接入与数据录入
 
-- **前端如何连 API：** `apps/web` 在开发模式下用 Vite 将一组前缀（`/auth`、`/me`、`/tasks`、`/league` 等，见 `apps/web/vite.config.ts`）**代理**到后端，默认目标为 `http://localhost:3000`。生产或 Docker 下由 **Nginx** 把相同路径转发到 `api` 容器。浏览器始终访问**同源**路径（如 `/auth/login`），不手写完整 API 域名。
+- **前端如何连 API：** `apps/web` 在开发模式下用 Vite 将一组前缀（`/auth`、`/me`、`/tasks`、`/league`、`/academic` 等，见 `apps/web/vite.config.ts`）**代理**到后端，默认目标为 `http://localhost:3000`。生产或 Docker 下由 **Nginx** 把相同路径转发到 `api` 容器。浏览器始终访问**同源**路径（如 `/auth/login`），不手写完整 API 域名。
 - **认证：** `POST /auth/login`（JSON：`email`、`password`），成功后在 **HttpOnly Cookie** 中写入会话；后续 `fetch` 需 `credentials: "include"`（前端封装已处理）。`GET /me` 返回当前用户与角色。
 - **如何录入数据：**
   - **演示库重置：** 配置好 `DATABASE_URL` 后执行 `pnpm db:migrate`，再执行 **`pnpm db:seed`**。种子脚本会清空业务表并写入演示用户、社团、任务、时间轴缓存等（可反复执行，**仅适用于开发库**）。
   - **日常增量：** 使用各页面功能（注册流程若未开放则依赖种子用户登录后操作），或直接调用对应 REST接口（需携带会话 Cookie或后续若开放的服务端密钥）。
-**种子用户（seed users）** 不是另一种登录方式，而是 `pnpm db:seed` 写入数据库的一批**普通用户记录**。登录方式与所有人相同：`POST /auth/login` + 邮箱、密码；系统**没有**开放自助注册，因此演示或开发环境里新账号要么来自种子，要么由**团委管理员**在 **「师生录入」** 页面（`/app/league/roster`，需 `league_admin` 角色）创建。
+**种子用户（seed users）** 不是另一种登录方式，而是 `pnpm db:seed` 写入数据库的一批**普通用户记录**。登录方式与所有人相同：`POST /auth/login` + 邮箱、密码；系统**没有**开放自助注册，因此演示或开发环境里新账号要么来自种子，要么由**团委管理员**在 **「师生录入」** 页面（`/app/league/roster`，需 `league_admin` 角色）创建。课表由 **教务管理员**（`academic_admin`，演示账号 `academic@demo.school`）在 **「教务课表」**（`/app/academic/program-schedule`）录入。
 ---
 
 ## Optional: local dev with Postgres / 可选：本地 Postgres + pnpm 开发

@@ -52,7 +52,7 @@ const tabBtn = (active: boolean) =>
 export default function ProgramScheduleAdminPage() {
   const { t } = useTranslation("common");
   const { user } = useSession();
-  const allowed = user?.roles.includes("league_admin") ?? false;
+  const allowed = user?.roles.includes("academic_admin") ?? false;
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,7 +80,7 @@ export default function ProgramScheduleAdminPage() {
 
   const postPublish = useCallback(
     async (items: PublishItem[]) => {
-      const res = await apiFetch("/league/program-schedule/publish", {
+      const res = await apiFetch("/academic/program-schedule/publish", {
         method: "POST",
         body: JSON.stringify({
           department: department.trim(),

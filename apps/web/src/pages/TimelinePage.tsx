@@ -703,6 +703,7 @@ export default function TimelinePage() {
           </button>
         </div>
         {syncMsg ? <p className="mt-2 text-sm text-destructive">{syncMsg}</p> : null}
+        <p className="mt-2 text-xs text-muted-foreground">{t("timeline.syncScheduleHint")}</p>
       </section>
 
       <section className="rounded-lg border border-border bg-card p-4 shadow-sm">

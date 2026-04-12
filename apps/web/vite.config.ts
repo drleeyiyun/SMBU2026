@@ -16,6 +16,7 @@ const API_PREFIXES = [
   "/tasks",
   "/notifications",
   "/league",
+  "/academic",
   "/uploads",
 ];
 

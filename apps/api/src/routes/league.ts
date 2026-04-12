@@ -17,7 +17,6 @@ import { requireUser, sessionMiddleware } from "../middleware/session.js";
 import { advisorDisplayNameByUserIds } from "../lib/org-advisor-names.js";
 import { leagueArchiveRouter } from "./league-archive.js";
 import { coordinationRouter } from "./league-coordination.js";
-import { leagueProgramScheduleRouter } from "./league-program-schedule.js";
 import { leagueRosterRouter } from "./league-roster.js";
 
 const STATUS_VALUES = ["unread", "read", "in_progress", "done"] as const;
@@ -63,7 +62,6 @@ export const leagueRouter = new Hono<{ Variables: AuthVariables }>()
   .route("/archive", leagueArchiveRouter)
   .route("/coordination-events", coordinationRouter)
   .route("/roster", leagueRosterRouter)
-  .route("/program-schedule", leagueProgramScheduleRouter)
   .get("/health", requireUser, requireRoles("league_admin"), (c) => c.json({ ok: true }))
   .get("/orgs", requireUser, requireRoles("league_admin"), async (c) => {
     const lifecycleRaw = c.req.query("lifecycle");

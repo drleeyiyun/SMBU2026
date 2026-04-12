@@ -10,6 +10,7 @@ export type Role =
   | "org_officer"
   | "org_president"
   | "league_admin"
+  | "academic_admin"
   | "instructor";
 
 const allowedSet = (allowed: readonly Role[]) => new Set(allowed);
