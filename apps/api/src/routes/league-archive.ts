@@ -21,6 +21,7 @@ import { requireUser, sessionMiddleware } from "../middleware/session.js";
 import { fetchStudentArchiveDetail } from "../services/student-archive-read.js";
 import {
   deleteVolunteerRecordForCoordination,
+  resolveVolunteerBaseHoursForEvent,
   resolveVolunteerHoursForClaim,
   syncVolunteerRecordsForUser,
 } from "../services/archive-volunteer-sync.js";
@@ -293,24 +294,30 @@ export const leagueArchiveRouter = new Hono<{ Variables: AuthVariables }>()
       .orderBy(desc(studentVolunteerEventClaims.createdAt));
 
     return c.json({
-      items: rows.map((r) => ({
-        userId: r.userId,
-        coordinationEventId: r.coordinationEventId,
-        eventTitle: r.eventTitle,
-        claimedHours:
-          r.claimedHours !== null && r.claimedHours !== undefined
-            ? Number.parseFloat(String(r.claimedHours))
-            : null,
-        resolvedHours: resolveVolunteerHoursForClaim(r.claimedHours, {
+      items: rows.map((r) => {
+        const eventSlice = {
           startsAt: r.eventStartsAt,
           endsAt: r.eventEndsAt,
           defaultVolunteerHours: r.defaultVolunteerHours,
-        }),
-        createdAt: r.createdAt.toISOString(),
-        studentDisplayName: r.displayName,
-        studentNo: r.studentNo,
-        volunteerNumber: r.volunteerNumber,
-      })),
+        };
+        return {
+          userId: r.userId,
+          coordinationEventId: r.coordinationEventId,
+          eventTitle: r.eventTitle,
+          claimedHours:
+            r.claimedHours !== null && r.claimedHours !== undefined
+              ? Number.parseFloat(String(r.claimedHours))
+              : null,
+          /** 审核通过后写入志愿记录的时长（申报优先于基础时长）。 */
+          resolvedHours: resolveVolunteerHoursForClaim(r.claimedHours, eventSlice),
+          /** 与活动「基础时长」一致，供审核参考，不等同于申报时长。 */
+          referenceBaseHours: resolveVolunteerBaseHoursForEvent(eventSlice),
+          createdAt: r.createdAt.toISOString(),
+          studentDisplayName: r.displayName,
+          studentNo: r.studentNo,
+          volunteerNumber: r.volunteerNumber,
+        };
+      }),
     });
   })
   .post("/volunteer-claims/review", requireUser, requireRoles("league_admin"), async (c) => {

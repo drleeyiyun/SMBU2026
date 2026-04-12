@@ -73,7 +73,10 @@ type PendingVolunteerClaimRow = {
   coordinationEventId: string;
   eventTitle: string;
   claimedHours: number | null;
+  /** 通过后计入时长（申报优先） */
   resolvedHours: number;
+  /** 活动基础时长，与统筹「基础义工时」或起止推算一致 */
+  referenceBaseHours: number;
   createdAt: string;
   studentDisplayName: string | null;
   studentNo: string | null;
@@ -503,7 +506,7 @@ export default function LeagueArchivePage() {
                     <code className="rounded bg-muted px-1 font-mono text-[11px]">{row.coordinationEventId}</code>
                   </p>
                   <p className="mt-1 text-xs">
-                    {t("leagueArchive.volunteerClaimResolved")}: {row.resolvedHours}h
+                    {t("leagueArchive.volunteerClaimResolved")}: {row.referenceBaseHours}h
                     {row.claimedHours != null
                       ? ` · ${t("leagueArchive.volunteerClaimDeclared")}: ${row.claimedHours}h`
                       : null}

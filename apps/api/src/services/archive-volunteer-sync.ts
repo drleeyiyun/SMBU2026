@@ -39,6 +39,18 @@ type VolunteerHoursEventSlice = Pick<
   "startsAt" | "endsAt" | "defaultVolunteerHours"
 >;
 
+/**
+ * 活动「基础时长」（与统筹里「基础义工时」一致）：优先统筹默认小时，未设置则按活动起止时间推算。
+ * 与学生申报无关，用于审核侧「核定参考时长」展示。
+ */
+export function resolveVolunteerBaseHoursForEvent(event: VolunteerHoursEventSlice): number {
+  const defaulted = parseNumericHours(event.defaultVolunteerHours);
+  if (defaulted !== null) {
+    return defaulted;
+  }
+  return hoursFromRange(event.startsAt, event.endsAt);
+}
+
 /** Resolves hours for a coordination claim: explicit claim > event default > duration of event. */
 export function resolveVolunteerHoursForClaim(
   claimClaimedHours: unknown,
@@ -48,11 +60,7 @@ export function resolveVolunteerHoursForClaim(
   if (explicit !== null) {
     return explicit;
   }
-  const defaulted = parseNumericHours(event.defaultVolunteerHours);
-  if (defaulted !== null) {
-    return defaulted;
-  }
-  return hoursFromRange(event.startsAt, event.endsAt);
+  return resolveVolunteerBaseHoursForEvent(event);
 }
 
 /** Idempotent upsert: claims × volunteer-category coordination events → volunteer_records. */

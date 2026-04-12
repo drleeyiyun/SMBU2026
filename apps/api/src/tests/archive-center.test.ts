@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hoursFromRange,
+  resolveVolunteerBaseHoursForEvent,
   resolveVolunteerHoursForClaim,
 } from "../services/archive-volunteer-sync.js";
 
@@ -32,5 +33,15 @@ describe("archive volunteer sync", () => {
 
   it("resolveVolunteerHoursForClaim falls back to duration", () => {
     expect(resolveVolunteerHoursForClaim(null, rangeEvent)).toBe(2.5);
+  });
+
+  it("resolveVolunteerBaseHoursForEvent ignores claim and matches default or range", () => {
+    expect(
+      resolveVolunteerBaseHoursForEvent({
+        ...rangeEvent,
+        defaultVolunteerHours: "3",
+      }),
+    ).toBe(3);
+    expect(resolveVolunteerBaseHoursForEvent(rangeEvent)).toBe(2.5);
   });
 });
